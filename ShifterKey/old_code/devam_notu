@@ -1,0 +1,3 @@
+esp12s yerine esp32s3 kullanmaya baslanacak
+bu sebeple i2c yerine spi baglantisi , ekran , pil , butonlar sorunsuz yeterli pin sayisina erisecek.
+yeni kodlamaya basla , önce islevsellik sonra tarayici ayarlari

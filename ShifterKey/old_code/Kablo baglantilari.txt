@@ -1,0 +1,30 @@
+esp12s 
+
+3.3v 
+ - PN532 -> VCC
+ - LCD -> VCC
+
+Gnd
+ - PN532 -> GND
+ - LCD -> GND
+ - Sol buton
+ - Sag buton
+ - Orta buton
+
+gpio 4
+ - PN532 -> SDA
+ - LCD -> SDA
+
+gpio 5
+ - PN532 -> SCL
+ - LCD -> SCL
+
+Gpio 12 -> Orta buton
+Gpio 13 -> Sol buton
+Gpio 14 -> Sag buton
+
+
+eksikler :
+5v -> 3.3v a düşülecek. 5V , T yapisi ile 2 kablo cikacak; bir kablo 5v LCD VCC ye diğeri 3.3v a düşülecek.
+
+batarya eklenebilinir.

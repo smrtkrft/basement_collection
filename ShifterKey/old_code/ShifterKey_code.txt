@@ -1,0 +1,686 @@
+// ===== ÇALIŞAN PN532 I2C RFID SİSTEMİ + LCD + BUTONLAR =====
+#include <Wire.h>
+#include <Adafruit_PN532.h>
+#include <LiquidCrystal_I2C.h>
+
+// PN532 I2C Mode
+#define PN532_IRQ   (2)
+#define PN532_RESET (3)
+
+Adafruit_PN532 nfc(PN532_IRQ, PN532_RESET);
+
+// LCD I2C
+LiquidCrystal_I2C lcd(0x3F, 16, 2);
+
+// Buton pinleri
+#define BTN_LEFT    13  // GPIO13 (D7) + GND - Geri
+#define BTN_RIGHT   14  // GPIO14 (D5) + GND - İleri  
+#define BTN_OK      12  // GPIO12 (D6) + GND - Seç
+
+// Sistem değişkenleri
+uint8_t storedUID[4];
+bool hasStoredUID = false;
+String mode = "READ";
+uint8_t customUID[8];
+int currentMenu = 0;
+int menuSelection = 0;
+int uidEditPos = 0;      // UID düzenleme pozisyonu
+bool uidEditMode = false; // UID düzenleme modu
+char hexChars[] = "0123456789ABCDEF";
+
+// Buton debounce
+unsigned long lastButtonTime = 0;
+#define DEBOUNCE_DELAY 500
+
+// Magic card tipleri
+enum MagicCardType {
+  UNKNOWN_CARD = 0,
+  GEN1A_CARD = 1,
+  GEN2_CARD = 2,
+  GEN1B_CARD = 3,
+  CUID_CARD = 4
+};
+
+// UID'yi string'e çevir
+String uidToString(uint8_t* uid, int length) {
+  String result = "";
+  for (int i = 0; i < length; i++) {
+    if (uid[i] < 0x10) result += "0";
+    result += String(uid[i], HEX);
+    if (i < length - 1) result += ":";
+  }
+  result.toUpperCase();
+  return result;
+}
+
+// String'den UID'ye çevir
+bool stringToUID(String str, uint8_t* uid) {
+  str.replace(":", "");
+  if (str.length() != 8) return false;
+  
+  for (int i = 0; i < 4; i++) {
+    String byteStr = str.substring(i*2, i*2+2);
+    uid[i] = strtol(byteStr.c_str(), NULL, 16);
+  }
+  return true;
+}
+
+// LCD güncelleme
+void updateLCD(String line1, String line2 = "") {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(line1.substring(0, 16));
+  if (line2.length() > 0) {
+    lcd.setCursor(0, 1);
+    lcd.print(line2.substring(0, 16));
+  }
+}
+
+// Buton okuma - 3 buton için
+bool readButton(int pin) {
+  static bool buttonPressed[3] = {false, false, false};
+  int pinIndex = (pin == BTN_LEFT) ? 0 : (pin == BTN_RIGHT) ? 1 : 2;
+  
+  bool currentState = digitalRead(pin);
+  
+  // Buton basıldı mı? (LOW = basılı)
+  if (currentState == LOW && !buttonPressed[pinIndex]) {
+    buttonPressed[pinIndex] = true;
+    
+    // Global debounce kontrolü
+    if (millis() - lastButtonTime > 300) {
+      lastButtonTime = millis();
+      Serial.print("Buton basıldı - Pin: ");
+      Serial.print(pin);
+      Serial.print(", Type: ");
+      if (pin == BTN_LEFT) Serial.println("LEFT");
+      else if (pin == BTN_RIGHT) Serial.println("RIGHT");
+      else Serial.println("OK");
+      return true;
+    }
+  }
+  
+  // Buton bırakıldı mı? (HIGH = bırakılmış)
+  if (currentState == HIGH && buttonPressed[pinIndex]) {
+    buttonPressed[pinIndex] = false;
+  }
+  
+  return false;
+}
+
+// Ana menü güncelle - tek seçenek göster
+void updateMainMenu() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("ShifterKey v1.0");
+  lcd.setCursor(0, 1);
+  
+  // Sadece mevcut seçeneği göster
+  switch(menuSelection) {
+    case 0: 
+      lcd.print("Mode: READ");
+      mode = "READ"; 
+      break;
+    case 1: 
+      lcd.print("Mode: COPY");
+      mode = "COPY"; 
+      break;
+    case 2: 
+      lcd.print("Mode: WRITE");
+      mode = "WRITE"; 
+      break;
+    case 3: 
+      lcd.print("Mode: NEW UID");
+      mode = "NEWUID"; 
+      break;
+  }
+  
+  Serial.print("Menü - Seçim: ");
+  Serial.print(menuSelection);
+  Serial.print(" (");
+  Serial.print(mode);
+  Serial.println(")");
+}
+
+// UID'yi byte array'e çevir
+void convertCustomUIDToBytes(uint8_t* bytes) {
+  for (int i = 0; i < 4; i++) {
+    bytes[i] = (customUID[i*2] << 4) | customUID[i*2+1];
+  }
+}
+
+// Ana menü göster - fonksiyon sırasını düzelt
+void showMainMenu() {
+  currentMenu = 0;
+  updateMainMenu();
+}
+
+// Durum göster
+void showStatus() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Mode: " + mode);
+  lcd.setCursor(0, 1);
+  if (hasStoredUID) {
+    lcd.print("UID: " + uidToString(storedUID, 4));
+  } else {
+    lcd.print("No UID stored");
+  }
+}
+
+// Magic card tespit - EKLENEN FONKSİYON
+MagicCardType detectMagicCardType(uint8_t* uid) {
+  // Gen1A test
+  uint8_t cmd1[] = { 0x40 };
+  uint8_t response1[16];
+  uint8_t response1Len = sizeof(response1);
+  
+  if (nfc.inDataExchange(cmd1, 1, response1, &response1Len)) {
+    uint8_t cmd2[] = { 0x43 };
+    uint8_t response2[16];
+    uint8_t response2Len = sizeof(response2);
+    if (nfc.inDataExchange(cmd2, 1, response2, &response2Len)) {
+      return GEN1A_CARD;
+    }
+  }
+  
+  // Gen2/CUID test
+  uint8_t keyA[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  if (nfc.mifareclassic_AuthenticateBlock(uid, 4, 0, MIFARE_CMD_AUTH_A, keyA)) {
+    uint8_t blockData[16];
+    if (nfc.mifareclassic_ReadDataBlock(0, blockData)) {
+      return GEN2_CARD;
+    }
+  }
+  
+  return UNKNOWN_CARD;
+}
+
+// Gen1A UID yazma - EKLENEN FONKSİYON
+bool writeGen1A_UID(uint8_t* uid, uint8_t* newUidBytes) {
+  Serial.println("Gen1A UID yazma başlıyor...");
+  
+  // Unlock
+  uint8_t cmd1[] = { 0x40 };
+  uint8_t response1[16];
+  uint8_t response1Len = sizeof(response1);
+  
+  if (!nfc.inDataExchange(cmd1, 1, response1, &response1Len)) {
+    return false;
+  }
+  
+  uint8_t cmd2[] = { 0x43 };
+  uint8_t response2[16];
+  uint8_t response2Len = sizeof(response2);
+  
+  if (!nfc.inDataExchange(cmd2, 1, response2, &response2Len)) {
+    return false;
+  }
+  
+  // Block 0 oku
+  uint8_t blockData[16];
+  if (!nfc.mifareclassic_ReadDataBlock(0, blockData)) {
+    return false;
+  }
+  
+  // Yeni UID yaz
+  uint8_t newBlock[16];
+  newBlock[0] = newUidBytes[0];
+  newBlock[1] = newUidBytes[1];
+  newBlock[2] = newUidBytes[2];
+  newBlock[3] = newUidBytes[3];
+  newBlock[4] = newUidBytes[0] ^ newUidBytes[1] ^ newUidBytes[2] ^ newUidBytes[3]; // BCC
+  
+  for (int i = 5; i < 16; i++) {
+    newBlock[i] = blockData[i];
+  }
+  
+  return nfc.mifareclassic_WriteDataBlock(0, newBlock);
+}
+
+// Gen2 UID yazma - EKLENEN FONKSİYON
+bool writeGen2_UID(uint8_t* uid, uint8_t* newUidBytes) {
+  Serial.println("Gen2 UID yazma başlıyor...");
+  
+  uint8_t keyA[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+  if (!nfc.mifareclassic_AuthenticateBlock(uid, 4, 0, MIFARE_CMD_AUTH_A, keyA)) {
+    return false;
+  }
+  
+  uint8_t blockData[16];
+  if (!nfc.mifareclassic_ReadDataBlock(0, blockData)) {
+    return false;
+  }
+  
+  uint8_t newBlock[16];
+  newBlock[0] = newUidBytes[0];
+  newBlock[1] = newUidBytes[1];
+  newBlock[2] = newUidBytes[2];
+  newBlock[3] = newUidBytes[3];
+  newBlock[4] = newUidBytes[0] ^ newUidBytes[1] ^ newUidBytes[2] ^ newUidBytes[3]; // BCC
+  
+  for (int i = 5; i < 16; i++) {
+    newBlock[i] = blockData[i];
+  }
+  
+  return nfc.mifareclassic_WriteDataBlock(0, newBlock);
+}
+
+// UID yazma ana fonksiyon - EKLENEN FONKSİYON
+bool writeUID(uint8_t* uid, uint8_t* newUidBytes) {
+  MagicCardType cardType = detectMagicCardType(uid);
+  
+  switch (cardType) {
+    case GEN1A_CARD:
+      return writeGen1A_UID(uid, newUidBytes);
+    case GEN2_CARD:
+      return writeGen2_UID(uid, newUidBytes);
+    default:
+      if (writeGen1A_UID(uid, newUidBytes)) return true;
+      if (writeGen2_UID(uid, newUidBytes)) return true;
+      return false;
+  }
+}
+
+// Serial komut işleme - EKLENEN FONKSİYON
+void processSerialCommand() {
+  if (Serial.available()) {
+    String command = Serial.readStringUntil('\n');
+    command.trim();
+    command.toUpperCase();
+    
+    if (command == "APPLY" && uidEditMode) {
+      convertCustomUIDToBytes(storedUID);
+      hasStoredUID = true;
+      uidEditMode = false;
+      mode = "WRITE";
+      currentMenu = 1;
+      
+      String uidStr = uidToString(storedUID, 4);
+      Serial.print("Oluşturulan UID: ");
+      Serial.println(uidStr);
+      updateLCD("UID Created!", uidStr);
+      delay(2000);
+      updateLCD("WRITE Mode", "Magic card...");
+      
+    } else if (command == "READ") {
+      mode = "READ";
+      currentMenu = 1;
+      updateLCD("READ Mode", "Place card...");
+      
+    } else if (command == "COPY") {
+      mode = "COPY";
+      hasStoredUID = false;
+      currentMenu = 1;
+      updateLCD("COPY Mode", "Source card...");
+      
+    } else if (command == "WRITE") {
+      if (!hasStoredUID) {
+        updateLCD("ERROR!", "No UID stored");
+        delay(2000);
+        showMainMenu();
+      } else {
+        mode = "WRITE";
+        currentMenu = 1;
+        updateLCD("WRITE Mode", "Magic card...");
+      }
+      
+    } else if (command.startsWith("NEWUID ")) {
+      String uidStr = command.substring(7);
+      uint8_t newUID[4];
+      if (stringToUID(uidStr, newUID)) {
+        memcpy(storedUID, newUID, 4);
+        hasStoredUID = true;
+        mode = "WRITE";
+        currentMenu = 1;
+        updateLCD("New UID Set", uidToString(newUID, 4));
+        delay(2000);
+        updateLCD("WRITE Mode", "Magic card...");
+      } else {
+        updateLCD("ERROR!", "Invalid format");
+        delay(2000);
+        showMainMenu();
+      }
+      
+    } else if (command == "STATUS") {
+      showStatus();
+      
+    } else if (command == "CLEAR") {
+      hasStoredUID = false;
+      mode = "READ";
+      updateLCD("UID Cleared", "");
+      delay(2000);
+      showMainMenu();
+    }
+  }
+}
+
+// UID düzenleme ekranı - geliştirilmiş görünüm
+void showUIDEditor() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("UID Pos:");
+  lcd.print(uidEditPos);
+  lcd.print(" Val:");
+  lcd.print(hexChars[customUID[uidEditPos]]);
+  lcd.setCursor(0, 1);
+  
+  // Tam UID'yi göster
+  String uidStr = "";
+  for (int i = 0; i < 8; i++) {
+    if (i == uidEditPos) {
+      uidStr += "[" + String(hexChars[customUID[i]]) + "]";
+    } else {
+      uidStr += String(hexChars[customUID[i]]);
+    }
+    if (i == 3 && uidStr.length() < 15) uidStr += ":";
+  }
+  
+  // 16 karaktere sığdır
+  if (uidStr.length() > 16) {
+    uidStr = uidStr.substring(0, 16);
+  }
+  lcd.print(uidStr);
+  
+  Serial.print("UID Edit - Pos: ");
+  Serial.print(uidEditPos);
+  Serial.print(", Hex: ");
+  Serial.print(hexChars[customUID[uidEditPos]]);
+  Serial.print(" (");
+  Serial.print(customUID[uidEditPos]);
+  Serial.println(")");
+}
+
+// Buton kontrolü - değiştirilmiş işlevler
+void handleButtons() {
+  static bool firstRun = true;
+  if (firstRun) {
+    firstRun = false;
+    Serial.println("=== 3 Buton Sistemi Aktif ===");
+    Serial.println("Ana Menü: LEFT=Geri, RIGHT=İleri, OK=Seç");
+    Serial.println("UID Edit: LEFT=Hex-, RIGHT=Hex+, OK=Sonraki/Kaydet");
+    
+    // customUID'yi sıfırla
+    for (int i = 0; i < 8; i++) {
+      customUID[i] = 0;
+    }
+  }
+  
+  // Debug - azaltıldı
+  static unsigned long lastCheck = 0;
+  if (millis() - lastCheck > 5000) { // 5 saniyede bir
+    lastCheck = millis();
+    Serial.print("L:");
+    Serial.print(digitalRead(BTN_LEFT));
+    Serial.print(" R:");
+    Serial.print(digitalRead(BTN_RIGHT));
+    Serial.print(" OK:");
+    Serial.print(digitalRead(BTN_OK));
+    Serial.print(" Menu:");
+    Serial.print(currentMenu);
+    Serial.print(" EditPos:");
+    Serial.println(uidEditPos);
+  }
+  
+  if (uidEditMode) {
+    // UID düzenleme modu - YENİ İŞLEVLER
+    if (readButton(BTN_LEFT)) {
+      Serial.println("UID Edit: LEFT - Hex değeri azalt");
+      customUID[uidEditPos] = (customUID[uidEditPos] > 0) ? customUID[uidEditPos] - 1 : 15;
+      showUIDEditor();
+    }
+    
+    if (readButton(BTN_RIGHT)) {
+      Serial.println("UID Edit: RIGHT - Hex değeri artır");
+      customUID[uidEditPos] = (customUID[uidEditPos] + 1) % 16;
+      showUIDEditor();
+    }
+    
+    if (readButton(BTN_OK)) {
+      Serial.println("UID Edit: OK - Sonraki pozisyon/Kaydet");
+      
+      if (uidEditPos < 7) {
+        // Sonraki pozisyona geç
+        uidEditPos++;
+        showUIDEditor();
+        Serial.print("Sonraki pozisyon: ");
+        Serial.println(uidEditPos);
+      } else {
+        // Son pozisyon - UID'yi kaydet ve WRITE moduna geç
+        Serial.println("UID tamamlandı! WRITE moduna geçiliyor...");
+        
+        convertCustomUIDToBytes(storedUID);
+        hasStoredUID = true;
+        uidEditMode = false;
+        mode = "WRITE";
+        currentMenu = 1;
+        
+        String uidStr = uidToString(storedUID, 4);
+        Serial.print("Oluşturulan UID: ");
+        Serial.println(uidStr);
+        updateLCD("UID Created!", uidStr);
+        delay(2000);
+        updateLCD("WRITE Mode", "Place magic card");
+        
+        // UID editörünü sıfırla
+        uidEditPos = 0;
+      }
+    }
+    
+  } else {
+    // Ana menü modu - ESKİ İŞLEVLER
+    if (readButton(BTN_LEFT)) {
+      if (currentMenu == 0) {
+        // Ana menüde - geri
+        Serial.println("Ana Menü: LEFT - Geri");
+        menuSelection = (menuSelection > 0) ? menuSelection - 1 : 3;
+        updateMainMenu();
+      } else {
+        // Alt menüde - ana menüye dön
+        Serial.println("LEFT - Ana menüye dön");
+        uidEditMode = false;
+        currentMenu = 0;
+        showMainMenu();
+      }
+    }
+    
+    if (readButton(BTN_RIGHT)) {
+      if (currentMenu == 0) {
+        // Ana menüde - ileri
+        Serial.println("Ana Menü: RIGHT - İleri");
+        menuSelection = (menuSelection < 3) ? menuSelection + 1 : 0;
+        updateMainMenu();
+      }
+    }
+    
+    if (readButton(BTN_OK)) {
+      if (currentMenu == 0) {
+        // Ana menüde - seç
+        Serial.println("Ana Menü: OK - Seç");
+        
+        if (menuSelection == 3) { // NEWUID
+          uidEditMode = true;
+          uidEditPos = 0;
+          currentMenu = 2;
+          // UID'yi sıfırla
+          for (int i = 0; i < 8; i++) {
+            customUID[i] = 0;
+          }
+          showUIDEditor();
+          Serial.println("UID editör aktif - LEFT/RIGHT: hex değer, OK: sonraki/kaydet");
+        } else {
+          currentMenu = 1;
+          switch(menuSelection) {
+            case 0: 
+              mode = "READ"; 
+              updateLCD("READ Mode", "Place card...");
+              Serial.println("READ modu aktif");
+              break;
+            case 1: 
+              mode = "COPY"; 
+              hasStoredUID = false; 
+              updateLCD("COPY Mode", "Source card...");
+              Serial.println("COPY modu aktif");
+              break;
+            case 2: 
+              if (!hasStoredUID) {
+                updateLCD("ERROR!", "No UID stored");
+                delay(2000);
+                showMainMenu();
+                return;
+              }
+              mode = "WRITE";
+              updateLCD("WRITE Mode", "Magic card...");
+              Serial.println("WRITE modu aktif");
+              break;
+          }
+        }
+      } else {
+        // Alt menüde - ana menüye dön
+        Serial.println("OK - Ana menüye dön");
+        uidEditMode = false;
+        currentMenu = 0;
+        showMainMenu();
+      }
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+  
+  Serial.println("=== ShifterKey RFID Clone + LCD + 3 Buttons ===");
+  
+  // 3 buton
+  pinMode(BTN_LEFT, INPUT_PULLUP);
+  pinMode(BTN_RIGHT, INPUT_PULLUP);
+  pinMode(BTN_OK, INPUT_PULLUP);
+  
+  Serial.println("\n=== 3 Buton Sistemi ===");
+  Serial.println("Ana Menü - LEFT: Geri, RIGHT: İleri, OK: Seç");
+  Serial.println("UID Edit - LEFT: Hex-, RIGHT: Hex+, OK: Sonraki/Kaydet");
+  Serial.println("LEFT (GPIO13), RIGHT (GPIO14), OK (GPIO12)");
+  
+  // I2C başlat
+  Wire.begin(4, 5);
+  Wire.setClock(100000);
+  
+  // LCD başlat
+  lcd.init();
+  lcd.backlight();
+  updateLCD("ShifterKey", "Starting...");
+  
+  delay(1000);
+  
+  // PN532 başlat
+  updateLCD("PN532", "Starting...");
+  nfc.begin();
+  
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (!versiondata) {
+    updateLCD("PN532 ERROR!", "Check cables");
+    while(1) delay(1000);
+  }
+  
+  nfc.SAMConfig();
+  updateLCD("PN532 OK!", "Ready");
+  delay(2000);
+  
+  showMainMenu();
+}
+
+void loop() {
+  handleButtons();
+  processSerialCommand();
+  
+  uint8_t uid[7];
+  uint8_t uidLength;
+  
+  // Kart kontrolü - sadece kart okuma modunda
+  if (currentMenu == 1 && nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 500)) {
+    if (uidLength == 4) {
+      String uidStr = uidToString(uid, 4);
+      
+      Serial.print("\n*** KART BULUNDU - UID: ");
+      Serial.print(uidStr);
+      Serial.println(" ***");
+      
+      updateLCD("Card Found!", uidStr);
+      delay(1000);
+      
+      if (mode == "READ") {
+        MagicCardType cardType = detectMagicCardType(uid);
+        switch(cardType) {
+          case GEN1A_CARD: 
+            Serial.println("Magic Card (Gen1A) - Yazılabilir!");
+            updateLCD("Magic Gen1A", "Writable!");
+            break;
+          case GEN2_CARD: 
+            Serial.println("Magic Card (Gen2/CUID) - Yazılabilir!");
+            updateLCD("Magic Gen2", "Writable!");
+            break;
+          default: 
+            Serial.println("Normal MIFARE kartı");
+            updateLCD("Normal Card", "MIFARE");
+            break;
+        }
+        delay(3000);
+        
+      } else if (mode == "COPY") {
+        if (!hasStoredUID) {
+          memcpy(storedUID, uid, 4);
+          hasStoredUID = true;
+          Serial.println("Kaynak kart kopyalandı!");
+          updateLCD("Source Copied", uidStr);
+          delay(2000);
+          updateLCD("Now place", "target card");
+        } else {
+          Serial.println("Hedef magic karta yazılıyor...");
+          updateLCD("Writing...", "Please wait");
+          
+          if (writeUID(uid, storedUID)) {
+            Serial.println("*** UID YAZMA BAŞARILI! ***");
+            updateLCD("SUCCESS!", uidToString(storedUID, 4));
+          } else {
+            Serial.println("*** UID YAZMA BAŞARISIZ! ***");
+            updateLCD("FAILED!", "Not writable");
+          }
+          delay(3000);
+          hasStoredUID = false;
+          showMainMenu();
+          return;
+        }
+        
+      } else if (mode == "WRITE") {
+        Serial.println("Saklanan UID yazılıyor...");
+        updateLCD("Writing UID...", uidToString(storedUID, 4));
+        
+        if (writeUID(uid, storedUID)) {
+          Serial.println("*** UID YAZMA BAŞARILI! ***");
+          updateLCD("SUCCESS!", uidToString(storedUID, 4));
+        } else {
+          Serial.println("*** UID YAZMA BAŞARISIZ! ***");
+          updateLCD("FAILED!", "Not writable");
+        }
+        delay(3000);
+        showMainMenu();
+        return;
+      }
+      
+      // Kart çıkarılana kadar bekle
+      Serial.println("Kartı çıkarın...");
+      updateLCD("Remove card", "Press OK=menu");
+      
+      while (nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100)) {
+        handleButtons();
+        delay(50);
+      }
+      
+      Serial.println("Kart çıkarıldı.");
+      updateLCD("Card removed", "Press OK=menu");
+    }
+  }
+  
+  delay(50);
+}
