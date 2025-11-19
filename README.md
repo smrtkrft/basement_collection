@@ -1,31 +1,5 @@
 # 🏚️ basement_collection  
-*A compact collection of small experiments, utilities, and fun side-projects.*
-
----
-
-## 📦 Projects (Auto-Generated List)
-Run the script below to update this list automatically.
-
-```bash
-#!/bin/bash
-# generate_project_list.sh
-echo "##  Projects" > PROJECTS.md
-echo "" >> PROJECTS.md
-
-for d in */ ; do
-    if [[ "$d" != "assets/" && "$d" != ".git/" ]]; then
-        echo "- **${d%/}**" >> PROJECTS.md
-    fi
-done
-
-echo "Project list generated in PROJECTS.md"
-```
-
-Then merge or paste the output into this README.
-
----
-
-## 🧭 Purpose  
+ 
 This repository keeps **tiny**, **non-critical**, or **experimental** projects in one place to avoid creating unnecessary standalone repositories.
 
 ---
