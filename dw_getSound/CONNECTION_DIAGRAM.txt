@@ -3,9 +3,9 @@
 ║                         CONNECTION DIAGRAM                                ║
 ╚═══════════════════════════════════════════════════════════════════════════╝
 
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         XIAO ESP32-C6                                   │
-│                                                                         │
+┌────────────────────────────────────────────────────────────────────────────┐
+│                         XIAO ESP32-C6                                      │
+│                                                                            │
 │  [5V]  [GND] [3V3]                       [D7/17] [D6/16]  [D10/18] [D9/20] │
 │   │     │     │                            │       │          │        │   │
 │   │     │     │                            │       │          │        │   │
@@ -23,14 +23,14 @@
     │     │     │            │       │       │                  │
     │     │     │           GND    GND    GND                   │
     │     │     │
-    │     │     │     ┌───────────────────────────────────┐
+    │     │     │     ┌───────────────────────────────────────┐
     │     │     │     │      DFPlayer Mini MP3 Module         │
     │     │     │     ├───────────────────────────────────────┤
     ├─────┼─────┼─────┤ VCC (5V)                              │
     │     ├─────┼─────┤ GND                                   │
     │     │     │     │                                       │
-    │     │     │     │ RX  ←───────────────────── GPIO16    │
-    │     │     │     │ TX  ─────────────────────→ GPIO17    │
+    │     │     │     │ RX  ←───────────────────── GPIO16     │
+    │     │     │     │ TX  ─────────────────────→ GPIO17     │
     │     │     │     │                                       │
     │     │     │     │ SPK1 ──┐                              │
     │     │     │     │        │  ┌─────────────┐             │
@@ -48,8 +48,8 @@
     └─────┴─────┴─── USB-C (Programming and Power)
 
 
-╔═══════════════════════════════════════════════════════════════════════════╗
-║                          PIN TABLE                                        ║
+╔═════════════════════════════════════════════════════════════════════════╗
+║                          PIN TABLE                                      ║
 ╠═══════════════╦═══════════════╦═════════════════════════════════════════╣
 ║ ESP32-C6 Pin  ║ Connection    ║ Description                             ║
 ╠═══════════════╬═══════════════╬═════════════════════════════════════════╣
@@ -120,6 +120,32 @@
          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
               ↓         ↓      ↓      ↓         ↓
          ESP32 GND   LED1   LED2   LED3   DFPlayer GND
+
+
+╔═════════════════════════════════════════════════════════════════════════╗
+║                   ORIGINAL TOY WIRING (COLOR CODES)                     ║
+╠═══════════════╦═══════════════╦═════════════════════════════════════════╣
+║ Wire Color    ║ Connection    ║ Description                             ║
+╠═══════════════╬═══════════════╬═════════════════════════════════════════╣
+║ YELLOW_1      ║ GPIO 20       ║ Button input (has diode, 50% correct)   ║
+║ YELLOW_2      ║ GND           ║ Button ground (has diode)               ║
+║               ║               ║ ⚠️ If button doesn't work, swap yellows ║
+║ RED           ║ Sword LED     ║ LED indicator for sword                 ║
+║ PURPLE        ║ Armor LED     ║ LED indicator for armor                 ║
+║ GREEN         ║ GND           ║ Common ground                           ║
+║ BLACK         ║ GND           ║ Common ground                           ║
+╚═══════════════╩═══════════════╩═════════════════════════════════════════╝
+
+⚠️  YELLOW WIRES (Button):
+   • YELLOW_1 has a diode (50% chance of correct polarity)
+   • YELLOW_2 connects to GND (also has diode)
+   • If button doesn't work: swap YELLOW_1 and YELLOW_2 positions
+   • Correct connection: One yellow to GPIO20, other to GND
+
+💡 LED IDENTIFICATION:
+   • RED wire: Sword LED (weapon lighting effect)
+   • PURPLE wire: Armor LED (body/chest lighting effect)
+   • Both LEDs share common ground (GREEN or BLACK wires)
 
 
 ╔═══════════════════════════════════════════════════════════════════════════╗
