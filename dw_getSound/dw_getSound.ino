@@ -13,9 +13,9 @@
  * 
  * Connections:
  * - Button: D9 (GPIO 20, pull-up)
- * - LED WiFi: D2 (GPIO 2)
- * - LED HTTP: D3 (GPIO 21)
- * - LED Audio: D6 (GPIO 16)
+ * - LED D2: GPIO 2 (WiFi status)
+ * - LED D3: GPIO 21 (HTTP activity)
+ * - LED D6: GPIO 16 (Audio - optional)
  * - DFPlayer RX: D4 (GPIO 22 - ESP32 TX)
  * - DFPlayer TX: D5 (GPIO 23 - ESP32 RX)
  * - Speaker: DFPlayer SPK+ / SPK-
@@ -33,9 +33,9 @@
 
 // Pin definitions (Xiao ESP32-C6)
 #define BUTTON_PIN 20
-#define LED_WIFI 2
-#define LED_HTTP 21
-#define LED_AUDIO 16
+#define LED_D2 2      // WiFi status
+#define LED_D3 21     // HTTP activity
+#define LED_D6 16     // Audio (optional)
 #define DFPLAYER_RX 23
 #define DFPLAYER_TX 22
 
@@ -71,9 +71,9 @@ void setup() {
   Serial.println("=================================\n");
   
   pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(LED_WIFI, OUTPUT);
-  pinMode(LED_HTTP, OUTPUT);
-  pinMode(LED_AUDIO, OUTPUT);
+  pinMode(LED_D2, OUTPUT);
+  pinMode(LED_D3, OUTPUT);
+  pinMode(LED_D6, OUTPUT);
   
   testLEDs();
   
@@ -147,7 +147,7 @@ void setup() {
   Serial.println("\nSystem ready!");
   Serial.println("Type 'help' for command list\n");
   
-  digitalWrite(LED_WIFI, LOW);
+  digitalWrite(LED_D2, LOW);
   
   Serial.println("⚡ POWER WARNING:");
   Serial.println("DFPlayer Mini can draw 200-500mA when reading SD card!");
@@ -186,20 +186,27 @@ void handleButtonPress() {
   if (systemState == 0) {
     Serial.println("🟢 System turning ON...");
     
-    flickerLED(LED_WIFI, 3, 60);
-    fadeLED(LED_WIFI, 0, 255, 2000);
+    // Step 1: Quick flicker
+    flickerLED(LED_D2, 3, 60);
     
-    systemState = 1;
+    // Step 2: Setup PWM for LED fade
+    ledcAttach(LED_D2, 5000, 8); // 5kHz, 8-bit resolution
     
-    playAudio(1);
+    // Step 3: Play 001.mp3 with LED_D3 blinking AND LED_D2 fade-in simultaneously
+    playAudioWithLED(1, true);  // Play 001.mp3 with fade
     
+    // Step 4: Now 001.mp3 is finished, continue with URLs
     if (urlCount1 > 0) {
-      makeHTTPRequest(1);
+      makeHTTPRequest(1);  // This will handle success/fail and play 002.mp3
     } else {
       Serial.println("⚠️ URL List 1 is empty, no action taken");
-      delay(1000);
+      delay(2000);
       playAudio(2);
     }
+    
+    // After everything is done, change state to 1
+    systemState = 1;
+    Serial.printf("📊 New state: x = %d (ON)\n", systemState);
     
   } else {
     Serial.println("🔴 System turning OFF...");
@@ -216,11 +223,11 @@ void handleButtonPress() {
     
     Serial.println("💡 LED fading out...");
     
-    flickerLED(LED_WIFI, 3, 40);
-    fadeLED(LED_WIFI, 255, 0, 2000);
+    flickerLED(LED_D2, 3, 40);
+    fadeLED(LED_D2, 255, 0, 2000);
+    
+    Serial.printf("📊 New state: x = %d (OFF)\n", systemState);
   }
-  
-  Serial.printf("📊 New state: x = %d (%s)\n", systemState, systemState == 1 ? "ON" : "OFF");
 }
 
 // Send HTTP request (with list parameter)
@@ -233,7 +240,7 @@ void makeHTTPRequest(int listNumber) {
   // Internet check
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("❌ No internet connection!");
-    blinkLED(LED_WIFI, 3);
+    blinkLED(LED_D2, 3);
     
     // 003.mp3 + 004.mp3 sequentially (1 second interval)
     playAudio(3);
@@ -253,33 +260,52 @@ void makeHTTPRequest(int listNumber) {
     return;
   }
   
-  // Trigger all URLs
+  // Trigger all URLs with retry logic
   bool allSuccess = true;
   for (int i = 0; i < urlCount; i++) {
     String url = urlList[i];
-    Serial.printf("  [%d/%d] %s ... ", i + 1, urlCount, url.c_str());
+    bool urlSuccess = false;
     
-    digitalWrite(LED_HTTP, HIGH);
-    
-    HTTPClient http;
-    http.begin(url);
-    http.setTimeout(5000); // 5 second timeout
-    int httpCode = http.GET();
-    
-    if (httpCode > 0) {
-      if (httpCode == HTTP_CODE_OK) {
-        Serial.println("✅ Successful");
+    // Try each URL twice
+    for (int attempt = 1; attempt <= 2; attempt++) {
+      Serial.printf("  [%d/%d] %s (attempt %d/2) ... ", i + 1, urlCount, url.c_str(), attempt);
+      
+      digitalWrite(LED_D3, HIGH);
+      
+      HTTPClient http;
+      http.begin(url);
+      http.setTimeout(5000); // 5 second timeout
+      int httpCode = http.GET();
+      
+      if (httpCode > 0) {
+        if (httpCode == HTTP_CODE_OK) {
+          Serial.println("✅ Successful");
+          urlSuccess = true;
+          http.end();
+          digitalWrite(LED_D3, LOW);
+          break; // Success, no need to retry
+        } else {
+          Serial.printf("⚠️ HTTP %d\n", httpCode);
+        }
       } else {
-        Serial.printf("⚠️ HTTP %d\n", httpCode);
-        allSuccess = false;
+        Serial.printf("❌ Error: %s\n", http.errorToString(httpCode).c_str());
       }
-    } else {
-      Serial.printf("❌ Error: %s\n", http.errorToString(httpCode).c_str());
-      allSuccess = false;
+      
+      http.end();
+      digitalWrite(LED_D3, LOW);
+      
+      // If first attempt failed and we'll retry, wait a bit
+      if (attempt == 1) {
+        Serial.println("      ↻ Retrying...");
+        delay(1000);
+      }
     }
     
-    http.end();
-    digitalWrite(LED_HTTP, LOW);
+    if (!urlSuccess) {
+      allSuccess = false;
+      Serial.println("      ✗ Failed after 2 attempts");
+    }
+    
     delay(500); // Delay between URLs
   }
   
@@ -300,7 +326,7 @@ void makeHTTPRequest(int listNumber) {
 
 void playAudio(int trackNumber) {
   Serial.printf("🎵 Playing audio file: %03d.mp3\n", trackNumber);
-  // digitalWrite(LED_AUDIO, HIGH); // Temporarily disabled
+  // digitalWrite(LED_D6, HIGH); // Temporarily disabled
   
   // Send command with minimal debug (always root directory - 0x03)
   byte packet[10];
@@ -322,7 +348,7 @@ void playAudio(int trackNumber) {
   // Send directly
   dfSerial.write(packet, 10);
   
-  // LED_HTTP blinking duration (based on track number)
+  // LED_D3 blinking duration (based on track number)
   int ledDuration = 5500; // Default 5.5 seconds
   if(trackNumber == 1) {
     ledDuration = 4500; // 4.5 seconds for 001.mp3 (1 second shorter)
@@ -330,25 +356,25 @@ void playAudio(int trackNumber) {
     ledDuration = 5000; // 5.0 seconds for 002.mp3 (0.5 seconds shorter)
   }
   
-  // LED_HTTP (GPIO21) blinks randomly during audio playback
+  // LED_D3 (GPIO21) blinks randomly during audio playback
   unsigned long audioStartTime = millis();
   while(millis() - audioStartTime < ledDuration) {
     // Random speed blinking (50-200ms interval)
     int randomDelay = random(50, 200);
-    digitalWrite(LED_HTTP, HIGH);
+    digitalWrite(LED_D3, HIGH);
     delay(randomDelay);
-    digitalWrite(LED_HTTP, LOW);
+    digitalWrite(LED_D3, LOW);
     delay(randomDelay);
   }
   
-  // digitalWrite(LED_AUDIO, LOW); // Temporarily disabled
-  digitalWrite(LED_HTTP, LOW); // Turn off LED_HTTP after audio ends
+  // digitalWrite(LED_D6, LOW); // Temporarily disabled
+  digitalWrite(LED_D3, LOW); // Turn off LED_D3 after audio ends
 }
 
 // Non-blocking audio playback (simultaneous with URLs)
 void playAudioNonBlocking(int trackNumber) {
   Serial.printf("🎵 Starting audio file: %03d.mp3 (in background)\n", trackNumber);
-  // digitalWrite(LED_AUDIO, HIGH); // Temporarily disabled
+  // digitalWrite(LED_D6, HIGH); // Temporarily disabled
   
   // Send command with minimal debug (always root directory - 0x03)
   byte packet[10];
@@ -370,19 +396,104 @@ void playAudioNonBlocking(int trackNumber) {
   // Send directly
   dfSerial.write(packet, 10);
   
-  // LED_HTTP blinks randomly while audio plays in background (5.5 seconds)
+  // LED_D3 blinks randomly while audio plays in background (5.5 seconds)
   unsigned long audioStartTime = millis();
   while(millis() - audioStartTime < 5500) {
     // Random speed blinking (50-200ms interval)
     int randomDelay = random(50, 200);
-    digitalWrite(LED_HTTP, HIGH);
+    digitalWrite(LED_D3, HIGH);
     delay(randomDelay);
-    digitalWrite(LED_HTTP, LOW);
+    digitalWrite(LED_D3, LOW);
     delay(randomDelay);
   }
   
-  // digitalWrite(LED_AUDIO, LOW); // Temporarily disabled
-  digitalWrite(LED_HTTP, LOW); // Turn off LED_HTTP after audio ends
+  // digitalWrite(LED_D6, LOW); // Temporarily disabled
+  digitalWrite(LED_D3, LOW); // Turn off LED_D3 after audio ends
+}
+
+// Start audio command only (no waiting, truly non-blocking)
+void startAudioCommand(int trackNumber) {
+  byte packet[10];
+  packet[0] = 0x7E;
+  packet[1] = 0xFF;
+  packet[2] = 0x06;
+  packet[3] = 0x03; // Root directory command
+  packet[4] = 0x00;
+  packet[5] = 0x00;
+  packet[6] = (byte)trackNumber;
+  packet[9] = 0xEF;
+  
+  int16_t checksum = -(packet[1] + packet[2] + packet[3] + packet[4] + packet[5] + packet[6]);
+  packet[7] = (byte)(checksum >> 8);
+  packet[8] = (byte)(checksum & 0xFF);
+  
+  dfSerial.write(packet, 10);
+}
+
+// Play audio with LED_D3 blinking and optional fade-in for LED_D2
+void playAudioWithLED(int trackNumber, bool fadeLEDWifi) {
+  Serial.printf("🎵 Playing audio file: %03d.mp3\n", trackNumber);
+  
+  byte packet[10];
+  packet[0] = 0x7E;
+  packet[1] = 0xFF;
+  packet[2] = 0x06;
+  packet[3] = 0x03; // Root directory command
+  packet[4] = 0x00;
+  packet[5] = 0x00;
+  packet[6] = (byte)trackNumber;
+  packet[9] = 0xEF;
+  
+  int16_t checksum = -(packet[1] + packet[2] + packet[3] + packet[4] + packet[5] + packet[6]);
+  packet[7] = (byte)(checksum >> 8);
+  packet[8] = (byte)(checksum & 0xFF);
+  
+  dfSerial.write(packet, 10);
+  
+  // Audio duration based on track number
+  int audioDuration = 4500; // Default 4.5 seconds for 001.mp3
+  if(trackNumber == 2) {
+    audioDuration = 5000; // 5.0 seconds for 002.mp3
+  } else if(trackNumber >= 3) {
+    audioDuration = 5500; // 5.5 seconds for others
+  }
+  
+  // If fade is requested, start it in parallel
+  unsigned long fadeStartTime = millis();
+  int fadeSteps = 50;
+  int fadeStepDelay = 2000 / fadeSteps; // 2 seconds total fade
+  int currentFadeStep = 0;
+  
+  unsigned long audioStartTime = millis();
+  
+  // Play audio with LED_D3 blinking
+  while(millis() - audioStartTime < audioDuration) {
+    // LED_D3 random blinking
+    int randomDelay = random(50, 200);
+    digitalWrite(LED_D3, HIGH);
+    delay(randomDelay);
+    digitalWrite(LED_D3, LOW);
+    delay(randomDelay);
+    
+    // If fade is enabled, update LED_D2 brightness during blinks
+    if(fadeLEDWifi && currentFadeStep < fadeSteps) {
+      unsigned long elapsed = millis() - fadeStartTime;
+      if(elapsed >= currentFadeStep * fadeStepDelay) {
+        int brightness = map(currentFadeStep, 0, fadeSteps, 0, 255);
+        ledcWrite(LED_D2, brightness);
+        currentFadeStep++;
+      }
+    }
+  }
+  
+  digitalWrite(LED_D3, LOW);
+  
+  // Finalize fade if it was enabled
+  if(fadeLEDWifi) {
+    ledcDetach(LED_D2);
+    pinMode(LED_D2, OUTPUT);
+    digitalWrite(LED_D2, HIGH);
+  }
 }
 
 void processCommand(String command) {
@@ -558,7 +669,7 @@ void processCommand(String command) {
     Serial.println("═══════════════════════════════════════\n");
     Serial.println("Trying to play audio...");
     
-    digitalWrite(LED_AUDIO, HIGH);
+    digitalWrite(LED_D6, HIGH);
     
     // Clear buffer
     while(dfSerial.available()) dfSerial.read();
@@ -578,7 +689,7 @@ void processCommand(String command) {
     
     delay(5000);
     
-    digitalWrite(LED_AUDIO, LOW);
+    digitalWrite(LED_D6, LOW);
     
     Serial.println("Test finished.\n");
   }
@@ -588,7 +699,7 @@ void processCommand(String command) {
     Serial.println("By sending fast commands to DFPlayer,");
     Serial.println("we'll create rhythmic clicks/crackles from the speaker.\n");
     
-    digitalWrite(LED_AUDIO, HIGH);
+    digitalWrite(LED_D6, HIGH);
     
     Serial.println("🎵 Rhythm starting (10 seconds)...\n");
     
@@ -617,7 +728,7 @@ void processCommand(String command) {
       delay(100);
     }
     
-    digitalWrite(LED_AUDIO, LOW);
+    digitalWrite(LED_D6, LOW);
     
     Serial.println("\n\n═══════════════════════════════════════");
     Serial.println("🎧 Did RHYTHMIC sound come from the speaker?");
@@ -631,7 +742,7 @@ void processCommand(String command) {
     Serial.println("═══════════════════════════════════════");
     Serial.println("⚠️  For this test, you need to disconnect the speaker from DFPlayer");
     Serial.println("    and connect it to ESP32's D4 (GPIO22) pin!\n");
-    Serial.println("Speaker + ───> GPIO22 (LED_AUDIO)");
+    Serial.println("Speaker + ───> GPIO22 (LED_D6)");
     Serial.println("Speaker - ───> GND\n");
     
     Serial.println("When ready, type 'y' and press Enter (cancel: n)");
@@ -640,7 +751,7 @@ void processCommand(String command) {
     Serial.println("\n🎵 Playing melody with ESP32 PWM...\n");
     
     // PWM settings (ESP32-C6 new API)
-    int buzzerPin = LED_AUDIO;  // GPIO22
+    int buzzerPin = LED_D6;  // GPIO22
     
     // Notes (frequencies in Hz)
     int melody[] = {262, 294, 330, 349, 392, 440, 494, 523}; // C, D, E, F, G, A, B, C
@@ -707,7 +818,7 @@ void processCommand(String command) {
     delay(500);
     
     Serial.println("\n📡 Test 5: Play first file (0x03 -> 001.mp3)");
-    digitalWrite(LED_AUDIO, HIGH);
+    digitalWrite(LED_D6, HIGH);
     
     // First set volume to max
     Serial.println("   → Setting volume to 30...");
@@ -761,7 +872,7 @@ void processCommand(String command) {
       delay(100);
     }
     
-    digitalWrite(LED_AUDIO, LOW);
+    digitalWrite(LED_D6, LOW);
     
     Serial.println("\n═══════════════════════════════════════");
     Serial.println("🔁 TEST 6: Play from MP3 folder (0x12)");
@@ -771,7 +882,7 @@ void processCommand(String command) {
     // Clear buffer
     while(dfSerial.available()) dfSerial.read();
     
-    digitalWrite(LED_AUDIO, HIGH);
+    digitalWrite(LED_D6, HIGH);
     sendDFCommand(0x12, 0x00, 0x01); // Play MP3/001.mp3
     delay(200);
     checkUARTResponseDetailed();
@@ -810,7 +921,7 @@ void processCommand(String command) {
       }
       delay(100);
     }
-    digitalWrite(LED_AUDIO, LOW);
+    digitalWrite(LED_D6, LOW);
     
     Serial.println("\n═══════════════════════════════════════");
     Serial.println("📊 DFPLAYER RESPONSE CODES:");
@@ -887,12 +998,12 @@ void processCommand(String command) {
     
     for(int i = 1; i <= 3; i++) {
       Serial.printf("📢 Playing Track %d (00%d.mp3)...\n", i, i);
-      digitalWrite(LED_AUDIO, HIGH);
+      digitalWrite(LED_D6, HIGH);
       
       sendDFCommand(0x03, 0x00, i);
       delay(3000);
       
-      digitalWrite(LED_AUDIO, LOW);
+      digitalWrite(LED_D6, LOW);
       Serial.printf("✅ Track %d completed.\n\n", i);
       delay(500);
     }
@@ -907,7 +1018,7 @@ void processCommand(String command) {
     Serial.println("Type 'q' in Serial to exit.\n");
     
     int ledIndex = 0;
-    int ledPins[] = {LED_WIFI, LED_HTTP, LED_AUDIO};
+    int ledPins[] = {LED_D2, LED_D3, LED_D6};
     String ledNames[] = {"WiFi", "HTTP", "Audio"};
     bool lastButtonState = HIGH;
     
@@ -918,9 +1029,9 @@ void processCommand(String command) {
         if(c == 'q' || c == 'Q') {
           Serial.println("\n✅ Test terminated.\n");
           // Turn off all LEDs
-          digitalWrite(LED_WIFI, LOW);
-          digitalWrite(LED_HTTP, LOW);
-          digitalWrite(LED_AUDIO, LOW);
+          digitalWrite(LED_D2, LOW);
+          digitalWrite(LED_D3, LOW);
+          digitalWrite(LED_D6, LOW);
           break;
         }
       }
@@ -1048,7 +1159,7 @@ void checkWiFiStatus() {
           break;
       }
       Serial.println("\n📝 Try again with 'wifi SSID PASSWORD' command.\n");
-      digitalWrite(LED_WIFI, LOW);
+      digitalWrite(LED_D2, LOW);
       wifiConnected = false;
     }
     return;
@@ -1070,8 +1181,8 @@ void checkWiFiStatus() {
     Serial.printf("   Connection time: %lu seconds\n", connectTime);
     Serial.println("═══════════════════════════════════════\n");
     
-    // Turn off LED_WIFI (system still in x=0 state)
-    digitalWrite(LED_WIFI, LOW);
+    // Turn off LED_D2 (system still in x=0 state)
+    digitalWrite(LED_D2, LOW);
   }
 }
 
@@ -1156,7 +1267,7 @@ void printHelp() {
   Serial.println("   test quiet             - Audio test (minimal debug)\n");
   
   Serial.println("═══════════════════════════════════════");
-  Serial.println("💡 NASIL ÇALIŞIR?");
+  Serial.println("💡 HOW IT WORKS?");
   Serial.println("═══════════════════════════════════════");
   Serial.println("System works in toggle mode (x variable):");
   Serial.println("• x=0 → Button press → TURNS ON (x=1)");
@@ -1173,12 +1284,12 @@ void printHelp() {
 
 void printStatus() {
   Serial.println("\n═══════════════════════════════════════");
-  Serial.println("📊 SİSTEM DURUMU");
+  Serial.println("📊 SYSTEM STATUS");
   Serial.println("═══════════════════════════════════════\n");
   
-  Serial.println("🔘 Toggle Durumu:");
-  Serial.printf("   x = %d (%s)\n", systemState, systemState == 1 ? "🟢 Açık" : "🔴 Kapalı");
-  Serial.println("   (Her boot'ta 0'a resetlenir)\n");
+  Serial.println("🔘 Toggle State:");
+  Serial.printf("   x = %d (%s)\n", systemState, systemState == 1 ? "🟢 ON" : "🔴 OFF");
+  Serial.println("   (Resets to 0 on every boot)\n");
   
   Serial.println("🌐 WiFi:");
   if (WiFi.status() == WL_CONNECTED) {
@@ -1219,17 +1330,17 @@ void printStatus() {
 void testLEDs() {
   Serial.println("Starting LED test...");
   for (int i = 0; i < 2; i++) {
-    digitalWrite(LED_WIFI, HIGH);
+    digitalWrite(LED_D2, HIGH);
     delay(200);
-    digitalWrite(LED_WIFI, LOW);
+    digitalWrite(LED_D2, LOW);
     
-    digitalWrite(LED_HTTP, HIGH);
+    digitalWrite(LED_D3, HIGH);
     delay(200);
-    digitalWrite(LED_HTTP, LOW);
+    digitalWrite(LED_D3, LOW);
     
-    digitalWrite(LED_AUDIO, HIGH);
+    digitalWrite(LED_D6, HIGH);
     delay(200);
-    digitalWrite(LED_AUDIO, LOW);
+    digitalWrite(LED_D6, LOW);
   }
 }
 
@@ -1274,9 +1385,9 @@ void flickerLED(int pin, int times, int delayMs) {
 
 void blinkError() {
   while (true) {
-    digitalWrite(LED_AUDIO, HIGH);
+    digitalWrite(LED_D6, HIGH);
     delay(100);
-    digitalWrite(LED_AUDIO, LOW);
+    digitalWrite(LED_D6, LOW);
     delay(100);
   }
 }
@@ -1295,7 +1406,7 @@ void sendDFCommand(byte cmd, byte param1, byte param2) {
   packet[6] = param2; // Parameter low byte
   packet[9] = 0xEF;  // End byte
   
-  // Checksum hesapla (DFRobot resmi formülü)
+  // Calculate checksum (DFRobot official formula)
   int16_t checksum = -(packet[1] + packet[2] + packet[3] + packet[4] + packet[5] + packet[6]);
   packet[7] = (byte)(checksum >> 8);   // Checksum high byte
   packet[8] = (byte)(checksum & 0xFF); // Checksum low byte
@@ -1332,7 +1443,7 @@ void testDFPlayerRaw() {
   delay(300);
   
   Serial.println("   📡 Playing track 1 (001.mp3)...");
-  digitalWrite(LED_AUDIO, HIGH);
+  digitalWrite(LED_D6, HIGH);
   sendDFCommand(0x03, 0x00, 0x01);  // Play track 1
   
   Serial.println("\n   ⏳ Waiting 3 seconds...");
@@ -1365,7 +1476,7 @@ void testDFPlayerRaw() {
   }
   
   delay(3000);  // Audio playback duration
-  digitalWrite(LED_AUDIO, LOW);
+  digitalWrite(LED_D6, LOW);
 }
 
 void checkUARTResponse() {
