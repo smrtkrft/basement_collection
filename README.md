@@ -21,11 +21,11 @@ Projects here may include:
 ## Structure
 
 basement_collection/
-│
-├── project_1/
-├── project_2/
-├── project_3/
-└── ...
+                     ││
+                     │├── project_1/
+                     │├── project_2/
+                     │├── project_3/
+                     │└── ...
 
 ---
 
