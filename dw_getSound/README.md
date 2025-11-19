@@ -23,6 +23,14 @@ Modern collectible toys and action figures (like Funko POP!, statues, and displa
 
 This system uses an ESP32-C6 microcontroller, DFPlayer Mini audio module, and a simple button interface to add intelligence to any toy or collectible figure.
 
+## 🎬 See It In Action
+
+Watch the complete demonstration below - button press triggers audio playback, LED animations, and HTTP requests in real-time:
+
+https://github.com/user-attachments/assets/63fdfd88-6d4f-4fe7-b599-d426373d5c30
+
+*10-second demo: Toggle system → Audio feedback → LED indicators → HTTP trigger automation*
+
 ---
 
 # ESP32-C6 HTTP Audio Player
@@ -402,20 +410,17 @@ Features that can be added:
 
 ## 📄 License
 
-MIT License - You can use and modify as you wish.
+AGPL-3.0 License - You can use and modify as you wish.
 
 ## 🤝 Contributing
 
 Feel free to send pull requests for suggestions and improvements!
-
-
-https://github.com/user-attachments/assets/63fdfd88-6d4f-4fe7-b599-d426373d5c30
-
 
 ---
 
 **Project Date:** November 2025  
 **Platform:** Arduino IDE + ESP32-C6  
 **Version:** 1.0.0
+
 
 
