@@ -9,7 +9,7 @@ Run the script below to update this list automatically.
 ```bash
 #!/bin/bash
 # generate_project_list.sh
-echo "## 📦 Projects" > PROJECTS.md
+echo "##  Projects" > PROJECTS.md
 echo "" >> PROJECTS.md
 
 for d in */ ; do
