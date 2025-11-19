@@ -61,9 +61,9 @@ HTTP request triggering system controlled by DFPlayer Mini, activated by button 
 ### Connection Diagram
 
 ```
-┌─────────────────────────────────────┐
-│       Xiao ESP32-C6                 │
-├─────────────────────────────────────┤
+┌────────────────────────────────────┐
+│       Xiao ESP32-C6                │
+├────────────────────────────────────┤
 │ D9  (GPIO20) ─── Button ─── GND    │
 │ D2  (GPIO2)  ─── LED1 (WiFi) ─ 220Ω┤GND
 │ D3  (GPIO21) ─── LED2 (HTTP) ─ 220Ω┤GND
@@ -72,15 +72,15 @@ HTTP request triggering system controlled by DFPlayer Mini, activated by button 
 │ D7  (GPIO17) ─── DFPlayer TX       │
 │ 5V           ─── DFPlayer VCC      │
 │ GND          ─── DFPlayer GND      │
-└─────────────────────────────────────┘
+└────────────────────────────────────┘
 
 DFPlayer Mini:
 ┌────────────────────────┐
 │  [VCC] [RX] [TX] [GND] │
-│    │     │    │     │   │
+│    │     │    │     │  │
 │    5V   16   17   GND  │
 │                        │
-│  [SPK1] [SPK2]        │
+│  [SPK1] [SPK2]         │
 │     │      │           │
 │  Speaker (+/-)         │
 │                        │
@@ -413,3 +413,4 @@ Feel free to send pull requests for suggestions and improvements!
 **Project Date:** November 2025  
 **Platform:** Arduino IDE + ESP32-C6  
 **Version:** 1.0.0
+
