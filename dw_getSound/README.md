@@ -10,7 +10,7 @@ Modern collectible toys and action figures (like Funko POP!, statues, and displa
 - Press the button on your toy
 - Custom audio plays through built-in speaker
 - HTTP requests trigger smart home devices, webhooks, or APIs
-- LED indicators show WiFi, HTTP activity, and audio status
+- LED indicators show system status and audio playback
 - Fully configurable via serial commands
 
 **Perfect for:**
@@ -29,7 +29,6 @@ Watch the complete demonstration below - button press triggers audio playback, L
 
 https://github.com/user-attachments/assets/63fdfd88-6d4f-4fe7-b599-d426373d5c30
 
-*10-second demo: Toggle system → Audio feedback → LED indicators → HTTP trigger automation*
 
 ---
 
@@ -56,7 +55,7 @@ HTTP request triggering system controlled by DFPlayer Mini, activated by button 
 |-------------|------|--------------------|
 | D0          | 0    | -                  |
 | D1          | 1    | -                  |
-| D2          | 2    | LED1 (WiFi)        |
+| D2          | 2    | LED1 (Status)      |
 | D3          | 21   | -                  |
 | D4          | 22   | -                  |
 | D5          | 23   | -                  |
@@ -73,9 +72,9 @@ HTTP request triggering system controlled by DFPlayer Mini, activated by button 
 │       Xiao ESP32-C6                │
 ├────────────────────────────────────┤
 │ D9  (GPIO20) ─── Button ─── GND    │
-│ D2  (GPIO2)  ─── LED1 (WiFi) ─ 220Ω┤GND
-│ D3  (GPIO21) ─── LED2 (HTTP) ─ 220Ω┤GND
-│ D4  (GPIO22) ─── LED3 (Audio) ─220Ω┤GND
+│ D2  (GPIO2)  ─── LED1 (Status) ─ 220Ω┤GND
+│ D3  (GPIO21) ─── LED2 (Audio) ─ 220Ω┤GND
+│ D6  (GPIO16) ─── LED3 (Optional) ─220Ω┤GND
 │ D6  (GPIO16) ─── DFPlayer RX       │
 │ D7  (GPIO17) ─── DFPlayer TX       │
 │ 5V           ─── DFPlayer VCC      │
@@ -292,24 +291,24 @@ help                     # Command list
 ```
 1. Get next URL
    ↓
-2. Send HTTP GET request (LED HTTP on)
+2. Send HTTP GET request
    ↓
 3. Response successful?
    ├─ Yes → Go to 4
-   └─ No → LED HTTP blinks 5 times
+   └─ No → Status LED blinks (error)
    ↓
-4. Play corresponding MP3 (LED Audio on)
+4. Play corresponding MP3 (LED Audio blinks randomly)
    ↓
 5. Move to next URL
    ↓
 6. Ready (wait for button)
 ```
 
-### LED States:
+### LED Indicators:
 
-- 🟢 **LED WiFi (GPIO 2)**: Solid on = WiFi connected
-- 🔵 **LED HTTP (GPIO 3)**: Blinking = HTTP request in progress
-- 🔴 **LED Audio (GPIO 4)**: On = Audio playing
+- 💡 **LED GPIO2 (Status)**: System state and WiFi connection indicator
+- 🔊 **LED GPIO21 (Audio)**: Random blinking during audio playback (configure duration based on audio file length)
+- 🔧 **LED GPIO16 (Optional)**: Additional indicator for custom use
 
 ## 🔧 Example Scenarios
 
