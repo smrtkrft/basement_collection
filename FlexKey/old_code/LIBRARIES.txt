@@ -1,0 +1,35 @@
+FlexKey - Required Arduino Libraries
+=====================================
+
+Install these libraries via Arduino IDE Library Manager:
+(Sketch -> Include Library -> Manage Libraries)
+
+1. Adafruit PN532
+   - Search: "Adafruit PN532"
+   - Install: Latest version
+   - Purpose: NFC/RFID reader communication
+
+2. ArduinoJson
+   - Search: "ArduinoJson"
+   - Install: Version 7.x (latest)
+   - Purpose: JSON handling for web API
+
+3. ESP32 Board Support (if not already installed)
+   - File -> Preferences
+   - Additional Board Manager URLs:
+     https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+   - Tools -> Board -> Boards Manager
+   - Search: "esp32"
+   - Install: "esp32 by Espressif Systems"
+
+Built-in Libraries (no installation needed):
+- WiFi
+- WebServer
+- HTTPClient
+- WiFiClientSecure
+- Preferences
+- Wire
+
+Board Selection:
+- Tools -> Board -> ESP32 Arduino -> XIAO_ESP32C6
+- Tools -> Port -> (Your COM port)
