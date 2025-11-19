@@ -1,3 +1,30 @@
+# Interactive Toy Enhancement System
+
+![Interactive Toy Example](https://github.com/smrtkrft/basement_collection/raw/main/dw_getSound/assets/darth_vader_pop.jpg)
+
+## 🎮 About Interactive Toys
+
+Modern collectible toys and action figures (like Funko POP!, statues, and display figures) can be enhanced with smart electronics to create truly interactive experiences. This project transforms static collectibles into dynamic, internet-connected devices that respond to user interaction.
+
+**How it works:**
+- Press the button on your toy
+- Custom audio plays through built-in speaker
+- HTTP requests trigger smart home devices, webhooks, or APIs
+- LED indicators show WiFi, HTTP activity, and audio status
+- Fully configurable via serial commands
+
+**Perfect for:**
+- Smart home integration (trigger lights, scenes, routines)
+- IoT projects and automation
+- Collectible display enhancement
+- Interactive art installations
+- Custom sound effects for figurines
+- Webhook notifications and logging
+
+This system uses an ESP32-C6 microcontroller, DFPlayer Mini audio module, and a simple button interface to add intelligence to any toy or collectible figure.
+
+---
+
 # ESP32-C6 HTTP Audio Player
 
 HTTP request triggering system controlled by DFPlayer Mini, activated by button press, and plays audio.
@@ -61,6 +88,52 @@ DFPlayer Mini:
 │  001.mp3, 002.mp3...   │
 └────────────────────────┘
 ```
+
+## 🛠️ Hardware Components
+
+![Hardware Components](https://github.com/smrtkrft/basement_collection/raw/main/dw_getSound/assets/hardware_components.jpg)
+
+### Essential Components (Left 3 items)
+
+Perfect for toys with built-in button and speaker:
+
+| Component | Description | Purpose |
+|-----------|-------------|---------|
+| **Xiao ESP32-C6** | Tiny microcontroller with WiFi | Brain of the system, handles WiFi and logic |
+| **DFPlayer Mini** | MP3 audio player module | Plays audio files from SD card |
+| **MicroSD Card** | 8GB storage (FAT32) | Stores MP3 sound files (001.mp3, 002.mp3...) |
+
+These three components are sufficient for toys that already have:
+- ✅ A button you can wire to
+- ✅ A speaker you can replace/connect
+- ✅ Battery/power source
+
+### Optional Components (Right 2 items)
+
+For toys without speaker or button:
+
+| Component | Description | Use Case |
+|-----------|-------------|----------|
+| **PN532 NFC/RFID Reader** | Contactless card reader | Alternative to button - trigger with NFC card/tag |
+| **3W 8Ω Speaker** | Small speaker with cables | Add audio to toys without built-in speaker |
+
+**When to use optional components:**
+- 🔊 **Speaker**: Your toy has no speaker or broken speaker
+- 🏷️ **PN532 RFID**: Your toy has no button, or you want NFC card activation instead
+
+### Minimal Setup Options
+
+**Option 1 - With Button & Speaker (Basic):**
+- ESP32-C6 + DFPlayer Mini + MicroSD Card = **3 items**
+
+**Option 2 - With RFID, Without Button:**
+- ESP32-C6 + DFPlayer Mini + MicroSD Card + PN532 = **4 items**
+
+**Option 3 - Without Speaker:**
+- ESP32-C6 + DFPlayer Mini + MicroSD Card + External Speaker = **4 items**
+
+**Option 4 - Full Setup:**
+- All components = **5 items** (maximum flexibility)
 
 ### Required Materials
 
