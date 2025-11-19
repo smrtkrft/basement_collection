@@ -20,4 +20,12 @@ Projects here may include:
 
 ## Structure
 
+basement_collection/
+│
+├── project_1/
+├── project_2/
+└── ...
+
+
+LG/Eyw...
 SEU / EmekUlas /SmartKraft
