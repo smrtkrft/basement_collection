@@ -24,8 +24,11 @@ basement_collection/
 │
 ├── project_1/
 ├── project_2/
+├── project_3/
 └── ...
 
+---
 
-LG/Eyw...
+LG/Eyw..
+
 SEU / EmekUlas /SmartKraft
