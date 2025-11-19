@@ -408,9 +408,14 @@ MIT License - You can use and modify as you wish.
 
 Feel free to send pull requests for suggestions and improvements!
 
+
+https://github.com/user-attachments/assets/63fdfd88-6d4f-4fe7-b599-d426373d5c30
+
+
 ---
 
 **Project Date:** November 2025  
 **Platform:** Arduino IDE + ESP32-C6  
 **Version:** 1.0.0
+
 
