@@ -420,6 +420,3 @@ Feel free to send pull requests for suggestions and improvements!
 **Project Date:** November 2025  
 **Platform:** Arduino IDE + ESP32-C6  
 **Version:** 1.0.0
-
-
-Co-authored-by: SEU <s.emekulas@gmail.com>
