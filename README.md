@@ -32,3 +32,4 @@ basement_collection/
 LG/Eyw..
 
 SEU / EmekUlas /SmartKraft
+
