@@ -422,4 +422,5 @@ Feel free to send pull requests for suggestions and improvements!
 **Version:** 1.0.0
 
 
+Co-authored-by: SEU <s.emekulas@gmail.com>
 
