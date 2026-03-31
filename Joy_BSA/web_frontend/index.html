@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Joy BSA</title>
+<style>
+:root {
+  --bg: #1a1b2e;
+  --card: #252742;
+  --accent: #7c6fff;
+  --accent2: #ff6b9d;
+  --text: #e4e4f0;
+  --muted: #8888aa;
+  --success: #4ecdc4;
+  --danger: #ff6b6b;
+  --border: #363854;
+  --input-bg: #1e2038;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+.header {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  padding: 20px;
+  text-align: center;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 4px 20px rgba(124,111,255,0.3);
+}
+.header h1 {
+  font-size: 1.4em;
+  font-weight: 700;
+  letter-spacing: 2px;
+}
+.header .subtitle {
+  font-size: 0.75em;
+  opacity: 0.85;
+  margin-top: 4px;
+}
+.status-bar {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding: 10px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78em;
+  color: var(--muted);
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+.dot.on { background: var(--success); }
+
+.tabs {
+  display: flex;
+  background: var(--card);
+  border-bottom: 2px solid var(--border);
+  overflow-x: auto;
+}
+.tab {
+  flex: 1;
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: all 0.2s;
+  min-width: 60px;
+  white-space: nowrap;
+}
+.tab:hover { color: var(--text); }
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.content { padding: 16px; max-width: 600px; margin: 0 auto; }
+.panel { display: none; }
+.panel.active { display: block; }
+
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 18px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+}
+.card h3 {
+  font-size: 0.9em;
+  color: var(--accent);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+label {
+  display: block;
+  font-size: 0.78em;
+  color: var(--muted);
+  margin-bottom: 5px;
+  margin-top: 10px;
+}
+label:first-child { margin-top: 0; }
+
+input[type="text"], input[type="password"], input[type="number"], select, textarea {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.85em;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+}
+textarea { resize: vertical; min-height: 60px; font-family: monospace; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.82em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: white;
+}
+.btn-primary { background: var(--accent); }
+.btn-primary:hover { background: #6a5aee; transform: translateY(-1px); }
+.btn-success { background: var(--success); color: var(--bg); }
+.btn-success:hover { background: #3dbdb5; }
+.btn-danger { background: var(--danger); }
+.btn-danger:hover { background: #e55a5a; }
+.btn-sm { padding: 6px 12px; font-size: 0.75em; }
+.btn-group { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+
+.slider-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.slider-group input[type="range"] {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  outline: none;
+}
+.slider-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.slider-val {
+  font-size: 0.85em;
+  color: var(--accent);
+  min-width: 35px;
+  text-align: right;
+}
+
+.file-list {
+  list-style: none;
+}
+.file-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--input-bg);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  transition: border-color 0.2s;
+}
+.file-item.selected {
+  border-color: var(--accent);
+  background: rgba(124,111,255,0.1);
+}
+.file-item .fname {
+  font-size: 0.85em;
+  flex: 1;
+  cursor: pointer;
+}
+.file-item .fsize {
+  font-size: 0.72em;
+  color: var(--muted);
+  margin: 0 10px;
+}
+.file-item .file-actions { display: flex; gap: 6px; }
+
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 10px;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(124,111,255,0.05);
+}
+.upload-zone p { color: var(--muted); font-size: 0.85em; }
+.upload-zone .icon { font-size: 2em; margin-bottom: 8px; }
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  margin-top: 10px;
+  display: none;
+}
+.progress-bar .fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 3px;
+  transition: width 0.3s;
+  width: 0%;
+}
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--card);
+  border: 1px solid var(--border);
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 0.85em;
+  z-index: 200;
+  transition: transform 0.3s;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+.toast.show { transform: translateX(-50%) translateY(0); }
+.toast.success { border-color: var(--success); }
+.toast.error { border-color: var(--danger); }
+
+.wifi-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  background: var(--input-bg);
+  border-radius: 8px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+.wifi-item:hover { border-color: var(--accent); }
+.wifi-signal { font-size: 0.75em; color: var(--muted); }
+
+.effect-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 8px;
+}
+.effect-btn {
+  padding: 12px 8px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 0.78em;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.2s;
+}
+.effect-btn:hover { border-color: var(--accent); }
+.effect-btn.active {
+  border-color: var(--accent);
+  background: rgba(124,111,255,0.15);
+  color: var(--accent);
+}
+
+@media (max-width: 400px) {
+  .content { padding: 10px; }
+  .card { padding: 14px; }
+  .tab { padding: 10px 4px; font-size: 0.72em; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>JOY BSA</h1>
+  <div class="subtitle">ESP32-C6 Audio Player</div>
+</div>
+
+<div class="status-bar">
+  <div class="status-item"><div class="dot" id="wifiDot"></div><span id="wifiStatus">Disconnected</span></div>
+  <div class="status-item">IP: <span id="ipAddr">-</span></div>
+  <div class="status-item">Flash: <span id="flashInfo">-</span></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('audio')">Ses</div>
+  <div class="tab" onclick="switchTab('wifi')">WiFi</div>
+  <div class="tab" onclick="switchTab('api')">API</div>
+  <div class="tab" onclick="switchTab('led')">LED</div>
+  <div class="tab" onclick="switchTab('settings')">Ayar</div>
+</div>
+
+<div class="content">
+
+  <!-- AUDIO PANEL -->
+  <div class="panel active" id="panel-audio">
+    <div class="card">
+      <h3>Ses Kontrolu</h3>
+      <label>Ses Seviyesi</label>
+      <div class="slider-group">
+        <input type="range" id="volume" min="0" max="100" value="80" oninput="updateSliderVal(this,'volVal')">
+        <span class="slider-val" id="volVal">80</span>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="playAudio()">Oynat</button>
+        <button class="btn btn-danger" onclick="stopAudio()">Durdur</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Ses Dosyalari</h3>
+      <ul class="file-list" id="fileList"></ul>
+      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+        <div class="icon">+</div>
+        <p>Dosya yuklemek icin tikla veya suruklep birak</p>
+        <p style="font-size:0.7em;margin-top:4px;color:var(--accent)">WAV (16-bit PCM)</p>
+      </div>
+      <input type="file" id="fileInput" accept=".wav" style="display:none" onchange="uploadFile(this.files[0])">
+      <div class="progress-bar" id="uploadProgress"><div class="fill" id="uploadFill"></div></div>
+    </div>
+  </div>
+
+  <!-- WIFI PANEL -->
+  <div class="panel" id="panel-wifi">
+    <div class="card">
+      <h3>WiFi Ayarlari</h3>
+      <button class="btn btn-primary btn-sm" onclick="scanWifi()">Ag Tara</button>
+      <div id="wifiList" style="margin-top:10px;"></div>
+    </div>
+    <div class="card">
+      <h3>Baglanti</h3>
+      <label>SSID</label>
+      <input type="text" id="wifiSsid" placeholder="Ag adi">
+      <label>Sifre</label>
+      <input type="password" id="wifiPass" placeholder="Sifre">
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="saveWifi()">Baglan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- API PANEL -->
+  <div class="panel" id="panel-api">
+    <div class="card">
+      <h3>API Yapilandirmasi</h3>
+      <label>URL</label>
+      <input type="text" id="apiUrl" placeholder="https://example.com/webhook">
+      <label>Method</label>
+      <select id="apiMethod">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+      </select>
+      <label>Headers (satir basina Key: Value)</label>
+      <textarea id="apiHeaders" placeholder="Content-Type: application/json&#10;Authorization: Bearer xxx"></textarea>
+      <label>Body (POST icin)</label>
+      <textarea id="apiBody" placeholder='{"event":"button_press"}'></textarea>
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="saveApiConfig()">Kaydet</button>
+        <button class="btn btn-primary" onclick="testApi()">Test Et</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LED PANEL -->
+  <div class="panel" id="panel-led">
+    <div class="card">
+      <h3>LED Efekti</h3>
+      <div class="effect-grid" id="effectGrid">
+        <div class="effect-btn" data-effect="0" onclick="setEffect(0)">Kapali</div>
+        <div class="effect-btn" data-effect="1" onclick="setEffect(1)">Sabit</div>
+        <div class="effect-btn" data-effect="2" onclick="setEffect(2)">Yanip Son</div>
+        <div class="effect-btn" data-effect="3" onclick="setEffect(3)">Nefes</div>
+        <div class="effect-btn" data-effect="4" onclick="setEffect(4)">Kovalama</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>LED Ayarlari</h3>
+      <label>Parlaklik</label>
+      <div class="slider-group">
+        <input type="range" id="ledBright" min="0" max="255" value="255" oninput="updateSliderVal(this,'brightVal')">
+        <span class="slider-val" id="brightVal">255</span>
+      </div>
+      <label>Hiz</label>
+      <div class="slider-group">
+        <input type="range" id="ledSpeed" min="1" max="100" value="50" oninput="updateSliderVal(this,'speedVal')">
+        <span class="slider-val" id="speedVal">50</span>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="saveLedConfig()">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS PANEL -->
+  <div class="panel" id="panel-settings">
+    <div class="card">
+      <h3>Buton Modu</h3>
+      <select id="btnMode" style="margin-bottom:10px;">
+        <option value="0">Tek Tetikleme</option>
+        <option value="1">Toggle (AC/KAP)</option>
+      </select>
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="saveBtnConfig()">Kaydet</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Sistem</h3>
+      <div class="btn-group">
+        <button class="btn btn-danger" onclick="formatFlash()">Flash Formatla</button>
+      </div>
+      <p style="font-size:0.7em;color:var(--muted);margin-top:8px;">Tum ses dosyalari silinir!</p>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let selectedAudio = '';
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', t.textContent.toLowerCase().includes(
+      {audio:'ses',wifi:'wifi',api:'api',led:'led',settings:'ayar'}[name]
+    ));
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+}
+
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 2500);
+}
+
+function updateSliderVal(el, id) {
+  document.getElementById(id).textContent = el.value;
+}
+
+async function api(url, opts={}) {
+  try {
+    const r = await fetch(url, opts);
+    return await r.json();
+  } catch(e) {
+    toast('Baglanti hatasi', 'error');
+    return null;
+  }
+}
+
+// Status
+async function loadStatus() {
+  const d = await api('/api/status');
+  if (!d) return;
+  document.getElementById('wifiDot').className = 'dot' + (d.wifi_connected ? ' on' : '');
+  document.getElementById('wifiStatus').textContent = d.wifi_connected ? 'Bagli' : 'AP Modu';
+  document.getElementById('ipAddr').textContent = d.ip;
+  const free = (d.flash_free / 1048576).toFixed(1);
+  const total = (d.flash_total / 1048576).toFixed(1);
+  document.getElementById('flashInfo').textContent = free + '/' + total + ' MB';
+  document.getElementById('volume').value = d.volume;
+  document.getElementById('volVal').textContent = d.volume;
+  selectedAudio = d.selected_audio;
+}
+
+// Audio
+async function loadFiles() {
+  const files = await api('/api/audio/list');
+  if (!files) return;
+  const list = document.getElementById('fileList');
+  list.innerHTML = '';
+  files.forEach(f => {
+    const li = document.createElement('li');
+    li.className = 'file-item' + (f.name === selectedAudio ? ' selected' : '');
+    const sizeKb = (f.size / 1024).toFixed(0);
+    li.innerHTML = `
+      <span class="fname" onclick="selectFile('${f.name}')">${f.name}</span>
+      <span class="fsize">${sizeKb} KB</span>
+      <div class="file-actions">
+        <button class="btn btn-primary btn-sm" onclick="playFile('${f.name}')">&#9654;</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteFile('${f.name}')">&#10005;</button>
+      </div>
+    `;
+    list.appendChild(li);
+  });
+}
+
+async function selectFile(name) {
+  const r = await api('/api/audio/select', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({filename:name})
+  });
+  if (r && r.status==='ok') { selectedAudio=name; loadFiles(); toast('Secildi: '+name); }
+}
+
+async function playFile(name) {
+  await api('/api/audio/play', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({filename:name})
+  });
+}
+
+async function playAudio() {
+  // Save volume first
+  await api('/api/config/volume', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({volume: parseInt(document.getElementById('volume').value)})
+  });
+  await api('/api/audio/play', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+}
+
+async function stopAudio() {
+  await api('/api/audio/stop', {method:'POST'});
+}
+
+async function deleteFile(name) {
+  if (!confirm(name + ' silinsin mi?')) return;
+  const r = await api('/api/audio/delete', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({filename:name})
+  });
+  if (r && r.status==='ok') { loadFiles(); toast('Silindi'); }
+}
+
+function uploadFile(file) {
+  if (!file) return;
+  const bar = document.getElementById('uploadProgress');
+  const fill = document.getElementById('uploadFill');
+  bar.style.display = 'block';
+  fill.style.width = '0%';
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/audio/upload');
+  xhr.setRequestHeader('X-Filename', file.name);
+
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      fill.style.width = (e.loaded/e.total*100) + '%';
+    }
+  };
+  xhr.onload = () => {
+    bar.style.display = 'none';
+    const r = JSON.parse(xhr.responseText);
+    if (r.status==='ok') { toast('Yuklendi: '+file.name); loadFiles(); }
+    else toast(r.message, 'error');
+    document.getElementById('fileInput').value = '';
+  };
+  xhr.onerror = () => { bar.style.display='none'; toast('Yukleme hatasi','error'); };
+  xhr.send(file);
+}
+
+// Drag & drop
+const uz = document.getElementById('uploadZone');
+uz.addEventListener('dragover', (e) => { e.preventDefault(); uz.classList.add('dragover'); });
+uz.addEventListener('dragleave', () => uz.classList.remove('dragover'));
+uz.addEventListener('drop', (e) => {
+  e.preventDefault(); uz.classList.remove('dragover');
+  if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]);
+});
+
+// WiFi
+async function scanWifi() {
+  toast('Taranıyor...');
+  const nets = await api('/api/wifi/scan');
+  if (!nets) return;
+  const div = document.getElementById('wifiList');
+  div.innerHTML = '';
+  nets.forEach(n => {
+    const el = document.createElement('div');
+    el.className = 'wifi-item';
+    el.innerHTML = `<span>${n.ssid}</span><span class="wifi-signal">${n.rssi} dBm</span>`;
+    el.onclick = () => { document.getElementById('wifiSsid').value = n.ssid; };
+    div.appendChild(el);
+  });
+}
+
+async function saveWifi() {
+  const ssid = document.getElementById('wifiSsid').value;
+  const pass = document.getElementById('wifiPass').value;
+  if (!ssid) { toast('SSID gerekli','error'); return; }
+  const r = await api('/api/wifi/config', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ssid, password:pass})
+  });
+  if (r && r.status==='ok') toast('WiFi kaydedildi, baglaniliyor...');
+}
+
+// API Config
+async function loadConfig() {
+  const d = await api('/api/config');
+  if (!d) return;
+  document.getElementById('apiUrl').value = d.api.url;
+  document.getElementById('apiMethod').value = d.api.method;
+  document.getElementById('apiHeaders').value = d.api.headers;
+  document.getElementById('apiBody').value = d.api.body;
+  document.getElementById('ledBright').value = d.led.brightness;
+  document.getElementById('brightVal').textContent = d.led.brightness;
+  document.getElementById('ledSpeed').value = d.led.speed;
+  document.getElementById('speedVal').textContent = d.led.speed;
+  document.getElementById('btnMode').value = d.button.mode;
+
+  // Highlight active effect
+  document.querySelectorAll('.effect-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.effect) === d.led.effect);
+  });
+}
+
+async function saveApiConfig() {
+  const r = await api('/api/config/api', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      url: document.getElementById('apiUrl').value,
+      method: document.getElementById('apiMethod').value,
+      headers: document.getElementById('apiHeaders').value,
+      body: document.getElementById('apiBody').value,
+    })
+  });
+  if (r && r.status==='ok') toast('API ayarlari kaydedildi');
+}
+
+async function testApi() {
+  toast('API test ediliyor...');
+  await api('/api/audio/play', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+}
+
+// LED
+async function setEffect(n) {
+  document.querySelectorAll('.effect-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.dataset.effect) === n);
+  });
+  await api('/api/config/led', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({effect:n})
+  });
+}
+
+async function saveLedConfig() {
+  const r = await api('/api/config/led', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      effect: parseInt(document.querySelector('.effect-btn.active')?.dataset.effect || 0),
+      brightness: parseInt(document.getElementById('ledBright').value),
+      speed: parseInt(document.getElementById('ledSpeed').value),
+    })
+  });
+  if (r && r.status==='ok') toast('LED ayarlari kaydedildi');
+}
+
+// Button
+async function saveBtnConfig() {
+  const r = await api('/api/config/button', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({mode: parseInt(document.getElementById('btnMode').value)})
+  });
+  if (r && r.status==='ok') toast('Buton ayari kaydedildi');
+}
+
+// Format
+async function formatFlash() {
+  if (!confirm('Tum ses dosyalari silinecek! Emin misiniz?')) return;
+  toast('Formatlaniyor...');
+  const r = await api('/api/format', {method:'POST'});
+  if (r && r.status==='ok') { toast('Format tamamlandi'); loadFiles(); loadStatus(); }
+}
+
+// Volume change on slider release
+document.getElementById('volume').addEventListener('change', async function() {
+  await api('/api/config/volume', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({volume: parseInt(this.value)})
+  });
+});
+
+// Init
+loadStatus();
+loadFiles();
+loadConfig();
+setInterval(loadStatus, 5000);
+</script>
+</body>
+</html>
