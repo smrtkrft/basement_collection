@@ -46,7 +46,14 @@ static void send_json_ok(httpd_req_t *req, const char *msg)
 
 static void send_json_error(httpd_req_t *req, int code, const char *msg)
 {
-    httpd_resp_set_status(req, (code == 404) ? "404 Not Found" : "400 Bad Request");
+    const char *status_str;
+    switch (code) {
+    case 404: status_str = "404 Not Found"; break;
+    case 500: status_str = "500 Internal Server Error"; break;
+    case 507: status_str = "507 Insufficient Storage"; break;
+    default:  status_str = "400 Bad Request"; break;
+    }
+    httpd_resp_set_status(req, status_str);
     httpd_resp_set_type(req, "application/json");
     char resp[128];
     snprintf(resp, sizeof(resp), "{\"status\":\"error\",\"message\":\"%s\"}", msg);
@@ -57,6 +64,11 @@ static void send_json_error(httpd_req_t *req, int code, const char *msg)
 static esp_err_t status_handler(httpd_req_t *req)
 {
     cJSON *root = cJSON_CreateObject();
+
+    // Device ID
+    char device_name[16];
+    snprintf(device_name, sizeof(device_name), "BSA-%s", wifi_mgr_get_device_id());
+    cJSON_AddStringToObject(root, "device_id", device_name);
 
     // WiFi status
     char ip[16] = "0.0.0.0";
@@ -176,7 +188,7 @@ static esp_err_t audio_list_handler(httpd_req_t *req)
                 cJSON *file = cJSON_CreateObject();
                 cJSON_AddStringToObject(file, "name", entry->d_name);
 
-                char filepath[160];
+                char filepath[280];
                 snprintf(filepath, sizeof(filepath), "%s/%s", EXT_FLASH_AUDIO_DIR, entry->d_name);
                 struct stat st;
                 if (stat(filepath, &st) == 0) {
@@ -229,7 +241,7 @@ static esp_err_t audio_delete_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    char filepath[160];
+    char filepath[280];
     snprintf(filepath, sizeof(filepath), "%s/%s", EXT_FLASH_AUDIO_DIR, filename->valuestring);
 
     if (remove(filepath) == 0) {
@@ -299,7 +311,7 @@ static esp_err_t audio_play_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    char filepath[160];
+    char filepath[280];
     snprintf(filepath, sizeof(filepath), "%s/%s", EXT_FLASH_AUDIO_DIR, filename);
 
     esp_err_t ret = audio_player_play(filepath);
@@ -464,6 +476,150 @@ static esp_err_t config_volume_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// ── API Config (multi) ──
+// Stored as a single JSON array string under NVS key "apicfgs".
+// This used to live on ext_flash; moved to NVS so the multi-API feature
+// works even when the external SPI flash is absent.
+
+#define APICFGS_KEY "apicfgs"
+
+// Helper: load the configs array from NVS. Returns a cJSON array (caller frees).
+// If nothing stored yet, returns an empty array.
+static cJSON *apicfgs_load(void)
+{
+    char *stored = config_mgr_get_str(APICFGS_KEY);
+    if (stored == NULL) return cJSON_CreateArray();
+    cJSON *arr = cJSON_Parse(stored);
+    free(stored);
+    if (arr == NULL || !cJSON_IsArray(arr)) {
+        cJSON_Delete(arr);
+        return cJSON_CreateArray();
+    }
+    return arr;
+}
+
+// Helper: serialize the array and store it back to NVS.
+static esp_err_t apicfgs_save(cJSON *arr)
+{
+    char *json = cJSON_PrintUnformatted(arr);
+    if (json == NULL) return ESP_ERR_NO_MEM;
+    esp_err_t ret = config_mgr_set_str(APICFGS_KEY, json);
+    free(json);
+    return ret;
+}
+
+// GET /api/apiconf/list
+static esp_err_t apiconf_list_handler(httpd_req_t *req)
+{
+    cJSON *arr = apicfgs_load();
+    char *json = cJSON_PrintUnformatted(arr);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json ? json : "[]");
+    free(json);
+    cJSON_Delete(arr);
+    return ESP_OK;
+}
+
+// POST /api/apiconf/save
+static esp_err_t apiconf_save_handler(httpd_req_t *req)
+{
+    char *body = read_request_body(req);
+    if (body == NULL) { send_json_error(req, 400, "Invalid body"); return ESP_OK; }
+
+    cJSON *incoming = cJSON_Parse(body);
+    free(body);
+    if (incoming == NULL) { send_json_error(req, 400, "Invalid JSON"); return ESP_OK; }
+
+    cJSON *name = cJSON_GetObjectItem(incoming, "name");
+    if (!cJSON_IsString(name) || strlen(name->valuestring) == 0 || strlen(name->valuestring) > 32) {
+        cJSON_Delete(incoming);
+        send_json_error(req, 400, "name required (1..32 chars)");
+        return ESP_OK;
+    }
+
+    cJSON *arr = apicfgs_load();
+
+    // Replace existing entry with same name, or append.
+    int found = -1;
+    int total = cJSON_GetArraySize(arr);
+    for (int i = 0; i < total; i++) {
+        cJSON *item = cJSON_GetArrayItem(arr, i);
+        cJSON *n2 = cJSON_GetObjectItem(item, "name");
+        if (cJSON_IsString(n2) && strcmp(n2->valuestring, name->valuestring) == 0) {
+            found = i;
+            break;
+        }
+    }
+    if (found >= 0) {
+        cJSON_ReplaceItemInArray(arr, found, incoming);
+    } else {
+        cJSON_AddItemToArray(arr, incoming);
+    }
+
+    esp_err_t ret = apicfgs_save(arr);
+    cJSON_Delete(arr);
+
+    if (ret != ESP_OK) {
+        send_json_error(req, 500, "NVS write failed");
+        return ESP_OK;
+    }
+    ESP_LOGI(TAG, "API config saved: %s", name->valuestring);
+    send_json_ok(req, "API config saved");
+    return ESP_OK;
+}
+
+// POST /api/apiconf/delete
+static esp_err_t apiconf_delete_handler(httpd_req_t *req)
+{
+    char *body = read_request_body(req);
+    if (body == NULL) { send_json_error(req, 400, "Invalid body"); return ESP_OK; }
+
+    cJSON *root = cJSON_Parse(body);
+    free(body);
+    if (root == NULL) { send_json_error(req, 400, "Invalid JSON"); return ESP_OK; }
+
+    cJSON *name = cJSON_GetObjectItem(root, "name");
+    if (!cJSON_IsString(name)) {
+        cJSON_Delete(root);
+        send_json_error(req, 400, "name required");
+        return ESP_OK;
+    }
+
+    cJSON *arr = apicfgs_load();
+    int total = cJSON_GetArraySize(arr);
+    int removed = -1;
+    for (int i = 0; i < total; i++) {
+        cJSON *item = cJSON_GetArrayItem(arr, i);
+        cJSON *n2 = cJSON_GetObjectItem(item, "name");
+        if (cJSON_IsString(n2) && strcmp(n2->valuestring, name->valuestring) == 0) {
+            cJSON_DeleteItemFromArray(arr, i);
+            removed = i;
+            break;
+        }
+    }
+
+    if (removed < 0) {
+        cJSON_Delete(root);
+        cJSON_Delete(arr);
+        send_json_error(req, 404, "Not found");
+        return ESP_OK;
+    }
+
+    esp_err_t ret = apicfgs_save(arr);
+    cJSON_Delete(arr);
+
+    if (ret != ESP_OK) {
+        cJSON_Delete(root);
+        send_json_error(req, 500, "NVS write failed");
+        return ESP_OK;
+    }
+
+    ESP_LOGI(TAG, "API config deleted: %s", name->valuestring);
+    cJSON_Delete(root);
+    send_json_ok(req, "Deleted");
+    return ESP_OK;
+}
+
 // POST /api/format
 static esp_err_t format_handler(httpd_req_t *req)
 {
@@ -527,10 +683,20 @@ esp_err_t api_handlers_register(httpd_handle_t server)
     uri = (httpd_uri_t){ .uri = "/api/config/volume", .method = HTTP_POST, .handler = config_volume_handler };
     httpd_register_uri_handler(server, &uri);
 
+    // API config (multi)
+    uri = (httpd_uri_t){ .uri = "/api/apiconf/list", .method = HTTP_GET, .handler = apiconf_list_handler };
+    httpd_register_uri_handler(server, &uri);
+
+    uri = (httpd_uri_t){ .uri = "/api/apiconf/save", .method = HTTP_POST, .handler = apiconf_save_handler };
+    httpd_register_uri_handler(server, &uri);
+
+    uri = (httpd_uri_t){ .uri = "/api/apiconf/delete", .method = HTTP_POST, .handler = apiconf_delete_handler };
+    httpd_register_uri_handler(server, &uri);
+
     // Utilities
     uri = (httpd_uri_t){ .uri = "/api/format", .method = HTTP_POST, .handler = format_handler };
     httpd_register_uri_handler(server, &uri);
 
-    ESP_LOGI(TAG, "API handlers registered (%d endpoints)", 14);
+    ESP_LOGI(TAG, "API handlers registered (%d endpoints)", 18);
     return ESP_OK;
 }

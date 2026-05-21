@@ -15,7 +15,7 @@ static const char *TAG = "led_ctrl";
 #define LEDC_RESOLUTION LEDC_TIMER_8_BIT
 #define LED_TASK_STACK  2048
 
-static const gpio_num_t led_gpios[NUM_LEDS] = {LED_1_GPIO, LED_2_GPIO, LED_3_GPIO};
+static const gpio_num_t led_gpios[NUM_LEDS] = {SWORD_LED_GPIO, ARMOR_LED_GPIO, RESERVED_LED_GPIO};
 static const ledc_channel_t led_channels[NUM_LEDS] = {LEDC_CHANNEL_0, LEDC_CHANNEL_1, LEDC_CHANNEL_2};
 
 static TaskHandle_t s_led_task = NULL;
@@ -142,8 +142,8 @@ esp_err_t led_ctrl_init(void)
     // Create LED animation task
     xTaskCreate(led_task, "led_ctrl", LED_TASK_STACK, NULL, 2, &s_led_task);
 
-    ESP_LOGI(TAG, "LED controller initialized (GPIO%d, GPIO%d, GPIO%d)",
-             LED_1_GPIO, LED_2_GPIO, LED_3_GPIO);
+    ESP_LOGI(TAG, "LED controller initialized: sword=GPIO%d armor=GPIO%d reserved=GPIO%d",
+             SWORD_LED_GPIO, ARMOR_LED_GPIO, RESERVED_LED_GPIO);
     return ESP_OK;
 }
 

@@ -55,9 +55,9 @@ static void audio_play_task(void *arg)
     // Configure slot based on channels
     i2s_std_slot_config_t slot_cfg;
     if (wav_info.channels == 1) {
-        slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
+        slot_cfg = (i2s_std_slot_config_t)I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO);
     } else {
-        slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
+        slot_cfg = (i2s_std_slot_config_t)I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
     }
     i2s_channel_reconfig_std_slot(s_i2s_tx, &slot_cfg);
     i2s_channel_enable(s_i2s_tx);
@@ -98,9 +98,10 @@ static void audio_play_task(void *arg)
     free(buf);
     fclose(f);
 
-    // Flush remaining data with silence
+    // Flush remaining data with silence then disable I2S
     uint8_t silence[256] = {0};
     i2s_channel_write(s_i2s_tx, silence, sizeof(silence), &bytes_written, pdMS_TO_TICKS(100));
+    i2s_channel_disable(s_i2s_tx);
 
     ESP_LOGI(TAG, "Playback finished");
 

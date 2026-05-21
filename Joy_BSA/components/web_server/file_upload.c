@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include <sys/stat.h>
 
 static const char *TAG = "file_upload";
@@ -48,15 +49,22 @@ esp_err_t file_upload_handler(httpd_req_t *req)
         return ESP_OK;
     }
 
-    ESP_LOGI(TAG, "Uploading: %s (%d bytes)", filename, req->content_len);
+    ESP_LOGI(TAG, "Uploading: %s (%d bytes, free: %zu)", filename, req->content_len, free_space);
+
+    // Ensure audio directory exists
+    struct stat dst;
+    if (stat(EXT_FLASH_AUDIO_DIR, &dst) != 0) {
+        ESP_LOGW(TAG, "Audio dir missing, creating: %s", EXT_FLASH_AUDIO_DIR);
+        mkdir(EXT_FLASH_AUDIO_DIR, 0755);
+    }
 
     // Open file for writing
-    char filepath[160];
+    char filepath[280];
     snprintf(filepath, sizeof(filepath), "%s/%s", EXT_FLASH_AUDIO_DIR, filename);
 
     FILE *f = fopen(filepath, "wb");
     if (f == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for writing: %s", filepath);
+        ESP_LOGE(TAG, "Failed to open file for writing: %s (errno=%d)", filepath, errno);
         httpd_resp_set_status(req, "500 Internal Server Error");
         httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"Failed to create file\"}");
         return ESP_OK;
@@ -75,18 +83,25 @@ esp_err_t file_upload_handler(httpd_req_t *req)
     int remaining = req->content_len;
     int total_written = 0;
     bool error = false;
+    int timeout_retries = 0;
 
     while (remaining > 0) {
         int to_read = (remaining < UPLOAD_BUF_SIZE) ? remaining : UPLOAD_BUF_SIZE;
         int received = httpd_req_recv(req, buf, to_read);
         if (received <= 0) {
             if (received == HTTPD_SOCK_ERR_TIMEOUT) {
-                continue; // Retry on timeout
+                if (++timeout_retries > 10) {
+                    ESP_LOGE(TAG, "Upload timeout after retries");
+                    error = true;
+                    break;
+                }
+                continue;
             }
-            ESP_LOGE(TAG, "Upload receive error");
+            ESP_LOGE(TAG, "Upload receive error: %d", received);
             error = true;
             break;
         }
+        timeout_retries = 0;
 
         size_t written = fwrite(buf, 1, received, f);
         if (written != (size_t)received) {

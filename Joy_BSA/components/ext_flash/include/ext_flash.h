@@ -5,6 +5,7 @@
 
 #define EXT_FLASH_MOUNT_POINT "/extflash"
 #define EXT_FLASH_AUDIO_DIR  EXT_FLASH_MOUNT_POINT "/audio"
+#define EXT_FLASH_API_DIR    EXT_FLASH_MOUNT_POINT "/api"
 
 /**
  * Initialize SPI bus, probe external flash chip, and mount FAT filesystem.

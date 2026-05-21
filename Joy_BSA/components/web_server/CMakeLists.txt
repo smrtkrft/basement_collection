@@ -3,4 +3,5 @@ idf_component_register(
     INCLUDE_DIRS "include"
     REQUIRES esp_http_server spiffs vfs ext_flash config_mgr audio_player led_ctrl wifi_mgr json
     EMBED_FILES "${CMAKE_SOURCE_DIR}/web_frontend/index.html"
+                "${CMAKE_SOURCE_DIR}/web_frontend/B_LOGO_T.png"
 )

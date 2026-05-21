@@ -42,6 +42,19 @@ static esp_err_t init_spiffs(void)
     return ESP_OK;
 }
 
+// Serve logo
+static esp_err_t logo_handler(httpd_req_t *req)
+{
+    extern const uint8_t logo_start[] asm("_binary_B_LOGO_T_png_start");
+    extern const uint8_t logo_end[] asm("_binary_B_LOGO_T_png_end");
+    size_t len = logo_end - logo_start;
+
+    httpd_resp_set_type(req, "image/png");
+    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=86400");
+    httpd_resp_send(req, (const char *)logo_start, len);
+    return ESP_OK;
+}
+
 // Serve index.html with embedded frontend
 static esp_err_t index_handler(httpd_req_t *req)
 {
@@ -74,9 +87,11 @@ esp_err_t web_server_init(void)
     init_spiffs();
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 20;
+    config.max_uri_handlers = 24;
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.stack_size = 8192;
+    config.stack_size = 16384;
+    config.recv_wait_timeout = 60;
+    config.send_wait_timeout = 30;
 
     esp_err_t ret = httpd_start(&s_server, &config);
     if (ret != ESP_OK) {
@@ -84,10 +99,12 @@ esp_err_t web_server_init(void)
         return ret;
     }
 
-    // Static file route (CSS/JS are inline in index.html)
+    // Static file routes
     httpd_uri_t index_uri = { .uri = "/", .method = HTTP_GET, .handler = index_handler };
-
     httpd_register_uri_handler(s_server, &index_uri);
+
+    httpd_uri_t logo_uri = { .uri = "/logo.png", .method = HTTP_GET, .handler = logo_handler };
+    httpd_register_uri_handler(s_server, &logo_uri);
 
     // Register API handlers
     api_handlers_register(s_server);

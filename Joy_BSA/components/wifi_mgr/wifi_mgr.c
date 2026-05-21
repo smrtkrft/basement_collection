@@ -3,12 +3,16 @@
 
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_event.h"
+#include "mdns.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 
 #include <string.h>
+#include <stdio.h>
+#include <ctype.h>
 
 static const char *TAG = "wifi_mgr";
 
@@ -21,6 +25,64 @@ static esp_netif_t *s_sta_netif = NULL;
 static esp_netif_t *s_ap_netif = NULL;
 static int s_retry_count = 0;
 static volatile bool s_connected = false;
+static char s_device_id[7] = {0};  // "3EF42T" + null
+static char s_ap_ssid[32] = {0};
+
+static void generate_device_id(void)
+{
+    static const char b36[] = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+    // Compile-time seed from __DATE__ and __TIME__
+    const char *d = __DATE__;  // "Apr  5 2026"
+    const char *t = __TIME__;  // "14:30:05"
+    uint32_t seed = 0;
+    for (int i = 0; d[i]; i++) seed = seed * 31 + (uint8_t)d[i];
+    for (int i = 0; t[i]; i++) seed = seed * 37 + (uint8_t)t[i];
+
+    // Mix with chip MAC for per-device uniqueness
+    uint8_t mac[6];
+    esp_efuse_mac_get_default(mac);
+    uint32_t val = ((uint32_t)mac[2] << 24) | ((uint32_t)mac[3] << 16) |
+                   ((uint32_t)mac[4] << 8)  | (uint32_t)mac[5];
+    val ^= seed;
+
+    // Encode as 6-char base-34 (no O/I to avoid confusion)
+    for (int i = 5; i >= 0; i--) {
+        s_device_id[i] = b36[val % 34];
+        val /= 34;
+    }
+    s_device_id[6] = '\0';
+
+    snprintf(s_ap_ssid, sizeof(s_ap_ssid), "Joy BSA-%s", s_device_id);
+    ESP_LOGI(TAG, "Device ID: BSA-%s", s_device_id);
+}
+
+const char *wifi_mgr_get_device_id(void)
+{
+    return s_device_id;
+}
+
+// Initialize mDNS so the web UI is reachable at "bsa-<deviceid>.local" both
+// in AP mode (clients on the soft-AP can resolve it) and in STA mode (devices
+// on the same WiFi can resolve it). mdns_init() binds to all active netifs.
+static void setup_mdns(void)
+{
+    char hostname[24];
+    snprintf(hostname, sizeof(hostname), "bsa-%s", s_device_id);
+    for (int i = 0; hostname[i]; i++) {
+        hostname[i] = (char)tolower((unsigned char)hostname[i]);
+    }
+
+    esp_err_t ret = mdns_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "mdns_init failed: %s", esp_err_to_name(ret));
+        return;
+    }
+    mdns_hostname_set(hostname);
+    mdns_instance_name_set("Joy BSA");
+    mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
+    ESP_LOGI(TAG, "mDNS: http://%s.local", hostname);
+}
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                                int32_t event_id, void *event_data)
@@ -66,6 +128,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 esp_err_t wifi_mgr_init(void)
 {
+    generate_device_id();
     s_wifi_event_group = xEventGroupCreate();
 
     ESP_ERROR_CHECK(esp_netif_init());
@@ -81,6 +144,9 @@ esp_err_t wifi_mgr_init(void)
         WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL, NULL));
+
+    // mDNS responder for both AP and STA — call once after netif/event setup.
+    setup_mdns();
 
     // Try STA mode if credentials exist
     char *ssid = config_mgr_get_str("wifi_ssid");
@@ -118,8 +184,6 @@ esp_err_t wifi_mgr_start_ap(void)
 
     wifi_config_t ap_cfg = {
         .ap = {
-            .ssid = "JoyBSA-Setup",
-            .ssid_len = strlen("JoyBSA-Setup"),
             .channel = 1,
             .max_connection = 4,
             .authmode = WIFI_AUTH_OPEN,
@@ -128,12 +192,14 @@ esp_err_t wifi_mgr_start_ap(void)
             },
         },
     };
+    strncpy((char *)ap_cfg.ap.ssid, s_ap_ssid, sizeof(ap_cfg.ap.ssid) - 1);
+    ap_cfg.ap.ssid_len = strlen(s_ap_ssid);
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_cfg));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "AP mode started: SSID=JoyBSA-Setup, IP=192.168.4.1");
+    ESP_LOGI(TAG, "AP mode started: SSID=%s, IP=192.168.4.1", s_ap_ssid);
     return ESP_OK;
 }
 
