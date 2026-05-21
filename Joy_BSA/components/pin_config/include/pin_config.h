@@ -7,10 +7,15 @@
 // D5=GPIO23, D6=GPIO16, D7=GPIO17, D8=GPIO19, D9=GPIO20, D10=GPIO18
 
 // External SPI Flash (SPI2_HOST)
-#define EXT_FLASH_CS     GPIO_NUM_21   // D3
-#define EXT_FLASH_MISO   GPIO_NUM_0    // D0
-#define EXT_FLASH_MOSI   GPIO_NUM_22   // D4
-#define EXT_FLASH_CLK    GPIO_NUM_16   // D6
+// NOTE: On this PCB, D4 routes to chip pin 6 and D6 routes to chip pin 5
+// (verified by continuity probe). So MOSI must come out of D6 (so it lands on
+// chip pin 5 = DI) and CLK must come out of D4 (so it lands on chip pin 6).
+// This is the inverse of the obvious "MOSI=D4, CLK=D6" assignment that the
+// schematic intent would suggest.
+#define EXT_FLASH_CS     GPIO_NUM_21   // D3 -> chip pin 1 (CS)
+#define EXT_FLASH_MISO   GPIO_NUM_0    // D0 -> chip pin 2 (DO)
+#define EXT_FLASH_MOSI   GPIO_NUM_16   // D6 -> chip pin 5 (DI)
+#define EXT_FLASH_CLK    GPIO_NUM_22   // D4 -> chip pin 6 (CLK)
 
 // I2S Audio (MAX98357A)
 #define I2S_BCLK         GPIO_NUM_1    // D1

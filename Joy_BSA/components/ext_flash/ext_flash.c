@@ -22,20 +22,132 @@ static esp_flash_t *s_ext_flash = NULL;
 static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
 static const esp_partition_t *s_fat_partition = NULL;
 
+// --- Bit-bang diagnostic: bypass SPI peripheral entirely --------------------
+// Manually drive CS/CLK/MOSI and sample MISO via gpio_get_level().
+// Used as the ultimate diagnostic when SPI master + rescue probe both fail —
+// proves whether MISO can carry a chip-driven signal back to the ESP at all.
+
+static inline void bb_delay(void)
+{
+    // ~10us half-cycle → ~50 kHz SPI clock. Extremely conservative.
+    for (volatile int i = 0; i < 400; i++) { __asm__ __volatile__("nop"); }
+}
+
+static uint8_t bb_xfer_byte(uint8_t tx)
+{
+    uint8_t rx = 0;
+    for (int b = 7; b >= 0; b--) {
+        // Drive MOSI while CLK is low (SPI mode 0)
+        gpio_set_level(EXT_FLASH_MOSI, (tx >> b) & 1);
+        bb_delay();
+        // Rising edge: chip samples MOSI, chip drives MISO -> we sample MISO
+        gpio_set_level(EXT_FLASH_CLK, 1);
+        bb_delay();
+        if (gpio_get_level(EXT_FLASH_MISO)) {
+            rx |= (1 << b);
+        }
+        // Falling edge
+        gpio_set_level(EXT_FLASH_CLK, 0);
+    }
+    return rx;
+}
+
+static void bitbang_jedec_probe(void)
+{
+    ESP_LOGW(TAG, "===== BIT-BANG JEDEC PROBE (bypasses SPI peripheral) =====");
+
+    // Configure all 4 pins as plain GPIOs. MISO with internal pull-up so we
+    // can distinguish "chip driving LOW" from "MISO floating".
+    gpio_config_t out_cfg = {
+        .pin_bit_mask = (1ULL << EXT_FLASH_CS) | (1ULL << EXT_FLASH_CLK) |
+                        (1ULL << EXT_FLASH_MOSI),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&out_cfg);
+    gpio_config_t in_cfg = {
+        .pin_bit_mask = 1ULL << EXT_FLASH_MISO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&in_cfg);
+
+    // Idle state
+    gpio_set_level(EXT_FLASH_CS, 1);
+    gpio_set_level(EXT_FLASH_CLK, 0);
+    gpio_set_level(EXT_FLASH_MOSI, 0);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    int miso_idle = gpio_get_level(EXT_FLASH_MISO);
+    ESP_LOGW(TAG, "  MISO idle (CS high, pull-up enabled) = %d  %s",
+             miso_idle, miso_idle ? "(floating HIGH = normal)" : "(LOW = pulled down somewhere)");
+
+    // Transaction: assert CS, send 0x9F, read 3 bytes
+    gpio_set_level(EXT_FLASH_CS, 0);
+    bb_delay();
+
+    uint8_t discard = bb_xfer_byte(0x9F);  // cmd byte; rx side is junk
+    uint8_t b0 = bb_xfer_byte(0x00);
+    uint8_t b1 = bb_xfer_byte(0x00);
+    uint8_t b2 = bb_xfer_byte(0x00);
+
+    bb_delay();
+    gpio_set_level(EXT_FLASH_CS, 1);
+
+    int miso_after = gpio_get_level(EXT_FLASH_MISO);
+
+    ESP_LOGW(TAG, "  Bit-bang JEDEC: cmd_echo=%02X  id=%02X %02X %02X  miso_after=%d",
+             discard, b0, b1, b2, miso_after);
+
+    if (b0 == 0x00 && b1 == 0x00 && b2 == 0x00) {
+        ESP_LOGE(TAG, "  *** Bit-bang also returns 00 00 00 — chip-to-ESP path is broken ***");
+        ESP_LOGE(TAG, "  This is conclusive: MISO line cannot carry a chip-driven signal back.");
+    } else if (b0 == 0xFF && b1 == 0xFF && b2 == 0xFF) {
+        ESP_LOGE(TAG, "  *** Bit-bang returns FF FF FF — MISO floating, chip silent ***");
+        ESP_LOGE(TAG, "  Chip is not responding to commands (CS/CLK/MOSI reach but no DO output).");
+    } else {
+        ESP_LOGI(TAG, "  *** CHIP RESPONDED via bit-bang — alive! ***");
+        ESP_LOGI(TAG, "  (SPI driver layer must have been the problem.)");
+    }
+    ESP_LOGW(TAG, "===== END BIT-BANG PROBE =====");
+}
+
 // --- Low-level SPI helpers used by the rescue probe ---------------------------
 
 static spi_device_handle_t s_probe_dev = NULL;
 
 static esp_err_t probe_open(int mode, int freq_hz)
 {
+    // cs_ena_pretrans/posttrans add ~2 SPI clock cycles of CS-low margin around
+    // each transaction. Defensive against tight setup/hold windows. Harmless on
+    // a standard chip; helpful if the link is marginal.
     spi_device_interface_config_t cfg = {
         .clock_speed_hz = freq_hz,
         .mode = mode,
         .spics_io_num = EXT_FLASH_CS,
         .queue_size = 1,
         .flags = 0,
+        .cs_ena_pretrans = 2,
+        .cs_ena_posttrans = 2,
     };
     return spi_bus_add_device(SPI2_HOST, &cfg, &s_probe_dev);
+}
+
+// Send raw bytes from a buffer (no automatic command framing). Used to flush
+// stuck QPI state by clocking out a string of 0xFF before the real reset cmd.
+static esp_err_t probe_raw(const uint8_t *tx, size_t len)
+{
+    spi_transaction_t t = {
+        .length = len * 8,
+        .rxlength = 0,
+        .tx_buffer = tx,
+        .rx_buffer = NULL,
+    };
+    return spi_device_polling_transmit(s_probe_dev, &t);
 }
 
 static void probe_close(void)
@@ -110,31 +222,48 @@ static esp_err_t probe_chip_with_rescue(void)
                 continue;
             }
 
-            // Step 1: Exit Continuous Read Mode — clock out a byte of 0xFF
-            // with no command interpretation. Done by sending 0xFF as "cmd"
-            // (which W25Q128JV treats as no-op if it's in continuous read mode).
-            ESP_LOGW(TAG, "  step 1: exit continuous read mode (0xFF)");
+            // Step 0: Flush any partial QPI nibble state. In QPI mode the chip
+            // treats each clocked byte as 2 nibbles; clocking 8 bytes of 0xFF
+            // with no command resets the chip's QPI byte boundary.
+            ESP_LOGW(TAG, "  step 0: flush QPI nibble state (8x 0xFF)");
+            uint8_t flush[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+            probe_raw(flush, sizeof(flush));
+            vTaskDelay(pdMS_TO_TICKS(1));
+
+            // Step 1: Reset QPI mode (0xF5). If the chip is in QPI/QSPI mode
+            // it ignores the standard SPI reset (0x66+0x99). 0xF5 is the
+            // Macronix RSTQIO command that drops it back to standard SPI.
+            // Harmless if chip is already in standard SPI mode.
+            ESP_LOGW(TAG, "  step 1: reset QPI mode (0xF5 RSTQIO)");
+            probe_cmd(0xF5, NULL, 0);
+            vTaskDelay(pdMS_TO_TICKS(2));
+
+            // Step 2: Exit Continuous Read Mode (clock out 0xFF as cmd).
+            ESP_LOGW(TAG, "  step 2: exit continuous read mode (0xFF)");
             probe_cmd(0xFF, NULL, 0);
             vTaskDelay(pdMS_TO_TICKS(2));
 
-            // Step 2: Software Reset Enable + Reset (0x66, 0x99) — separate
+            // Step 3: Software Reset Enable + Reset (0x66, 0x99). Separate
             // CS pulses required. Resets chip to default standby.
-            ESP_LOGW(TAG, "  step 2: software reset (0x66 + 0x99)");
+            ESP_LOGW(TAG, "  step 3: software reset (0x66 + 0x99)");
             probe_cmd(0x66, NULL, 0);
             vTaskDelay(pdMS_TO_TICKS(1));
             probe_cmd(0x99, NULL, 0);
-            vTaskDelay(pdMS_TO_TICKS(2));  // tRST = 30us for W25Q128JV
+            vTaskDelay(pdMS_TO_TICKS(2));  // tRST ~30us; we give 2ms
 
-            // Step 3: Release from Power-Down (0xAB). W25Q128JV may sit in
-            // deep power-down after a partial init from a previous boot.
-            ESP_LOGW(TAG, "  step 3: release power-down (0xAB)");
+            // Step 4: Release from Power-Down (0xAB). Chip may sit in deep
+            // power-down after a partial init from a previous boot.
+            ESP_LOGW(TAG, "  step 4: release power-down (0xAB)");
             probe_cmd(0xAB, NULL, 0);
-            vTaskDelay(pdMS_TO_TICKS(2));  // tRES1 = 20us max
+            vTaskDelay(pdMS_TO_TICKS(2));  // tRES1 ~20us; we give 2ms
 
-            // Step 4a: Try JEDEC ID (0x9F) — returns 3 bytes
+            // Step 4a: Try JEDEC ID (0x9F) — returns 3 bytes:
+            //   manufacturer_id, memory_type, capacity
+            //   MX25L25645G       = C2 20 19    (Macronix, 256Mbit)
+            //   W25Q128JV         = EF 40 18    (Winbond,  128Mbit)
             uint8_t jedec[3] = {0};
             if (probe_cmd(0x9F, jedec, 3) == ESP_OK) {
-                ESP_LOGW(TAG, "  JEDEC ID (0x9F): %02X %02X %02X  (W25Q128JV = EF 40 18)",
+                ESP_LOGW(TAG, "  JEDEC ID (0x9F): %02X %02X %02X  (MX25L25645G = C2 20 19)",
                          jedec[0], jedec[1], jedec[2]);
                 if (valid_id(jedec, 3)) {
                     ESP_LOGI(TAG, "  *** CHIP RESPONDED to JEDEC ID — alive! ***");
@@ -144,10 +273,12 @@ static esp_err_t probe_chip_with_rescue(void)
             }
 
             // Step 4b: Try Read Manufacturer/Device ID (0x90 + addr 0x000000)
-            // returns 2 bytes: mfr_id, device_id  (EF, 17 for W25Q128JV)
+            // returns 2 bytes: mfr_id, device_id
+            //   MX25L25645G = C2 19
+            //   W25Q128JV   = EF 17
             uint8_t mfd[2] = {0};
             if (probe_cmd_addr(0x90, 0x000000, mfd, 2) == ESP_OK) {
-                ESP_LOGW(TAG, "  Read Mfr/Dev (0x90): %02X %02X  (W25Q128JV = EF 17)",
+                ESP_LOGW(TAG, "  Read Mfr/Dev (0x90): %02X %02X  (MX25L25645G = C2 19)",
                          mfd[0], mfd[1]);
                 if (valid_id(mfd, 2)) {
                     ESP_LOGI(TAG, "  *** CHIP RESPONDED to 0x90 — alive! ***");
@@ -167,6 +298,12 @@ esp_err_t ext_flash_init(void)
 {
     ESP_LOGI(TAG, "Initializing external SPI flash...");
 
+    // Diagnostic: bit-bang JEDEC probe BEFORE binding the SPI peripheral.
+    // If the chip responds here but not via the SPI driver, the driver is the
+    // problem. If it doesn't respond here either, the chip-to-ESP signal path
+    // is the problem (regardless of what the multimeter tests showed).
+    bitbang_jedec_probe();
+
     // Configure SPI bus
     spi_bus_config_t bus_cfg = {
         .miso_io_num = EXT_FLASH_MISO,
@@ -182,6 +319,11 @@ esp_err_t ext_flash_init(void)
         ESP_LOGE(TAG, "Failed to initialize SPI bus: %s", esp_err_to_name(ret));
         return ret;
     }
+
+    // Power-up settle: Macronix tVSL spec is ~800us but some boards need
+    // tens of ms for Vcc to fully stabilize before the chip will accept
+    // the first command. Cheap insurance.
+    vTaskDelay(pdMS_TO_TICKS(50));
 
     // Bringup rescue: try to wake/reset the chip and read its ID via two
     // commands in two SPI modes. If any of them succeeds the chip is alive.
