@@ -9,6 +9,8 @@
 #include "driver/i2s_std.h"
 
 #include <string.h>
+#include <math.h>
+#include <stdlib.h>
 
 static const char *TAG = "audio_player";
 
@@ -22,6 +24,23 @@ static volatile bool s_playing = false;
 static volatile bool s_stop_request = false;
 static uint8_t s_volume = 80; // 0-100
 static SemaphoreHandle_t s_mutex = NULL;
+static bool s_i2s_enabled = false;  // tracks i2s_channel_enable/disable state
+
+static inline void i2s_safe_disable(void)
+{
+    if (s_i2s_enabled) {
+        i2s_channel_disable(s_i2s_tx);
+        s_i2s_enabled = false;
+    }
+}
+
+static inline void i2s_safe_enable(void)
+{
+    if (!s_i2s_enabled) {
+        i2s_channel_enable(s_i2s_tx);
+        s_i2s_enabled = true;
+    }
+}
 
 static char s_current_file[128] = {0};
 
@@ -49,7 +68,7 @@ static void audio_play_task(void *arg)
 
     // Reconfigure I2S clock for this file's sample rate
     i2s_std_clk_config_t clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(wav_info.sample_rate);
-    i2s_channel_disable(s_i2s_tx);
+    i2s_safe_disable();
     i2s_channel_reconfig_std_clock(s_i2s_tx, &clk_cfg);
 
     // Configure slot based on channels
@@ -60,7 +79,7 @@ static void audio_play_task(void *arg)
         slot_cfg = (i2s_std_slot_config_t)I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
     }
     i2s_channel_reconfig_std_slot(s_i2s_tx, &slot_cfg);
-    i2s_channel_enable(s_i2s_tx);
+    i2s_safe_enable();
 
     uint8_t *buf = malloc(AUDIO_BUF_SIZE);
     if (buf == NULL) {
@@ -101,7 +120,7 @@ static void audio_play_task(void *arg)
     // Flush remaining data with silence then disable I2S
     uint8_t silence[256] = {0};
     i2s_channel_write(s_i2s_tx, silence, sizeof(silence), &bytes_written, pdMS_TO_TICKS(100));
-    i2s_channel_disable(s_i2s_tx);
+    i2s_safe_disable();
 
     ESP_LOGI(TAG, "Playback finished");
 
@@ -213,5 +232,64 @@ esp_err_t audio_player_set_volume(uint8_t vol)
 {
     if (vol > 100) vol = 100;
     s_volume = vol;
+    return ESP_OK;
+}
+
+// Generate and play a 440 Hz sine tone synthesized in-place. Bypasses the
+// filesystem so it works even if no audio file has been uploaded — useful for
+// proving the I2S + amp + speaker chain.
+esp_err_t audio_player_play_test_tone(uint32_t duration_ms)
+{
+    const uint32_t sample_rate = 44100;
+    const float freq_hz = 440.0f;
+    const uint32_t total_samples = (sample_rate * duration_ms) / 1000;
+
+    // Reconfigure I2S clock + slot (stereo 16-bit 44.1k)
+    i2s_std_clk_config_t clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(sample_rate);
+    i2s_std_slot_config_t slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(
+        I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO);
+    i2s_safe_disable();
+    i2s_channel_reconfig_std_clock(s_i2s_tx, &clk_cfg);
+    i2s_channel_reconfig_std_slot(s_i2s_tx, &slot_cfg);
+    i2s_safe_enable();
+
+    // 1024-sample chunk (stereo 16-bit = 4 bytes/sample => 4096 byte buffer)
+    const size_t chunk = 1024;
+    int16_t *buf = malloc(chunk * 2 * sizeof(int16_t));
+    if (!buf) return ESP_ERR_NO_MEM;
+
+    ESP_LOGI(TAG, "Playing %lu ms test tone @ %.0f Hz (vol=%u%%)",
+             (unsigned long)duration_ms, freq_hz, s_volume);
+
+    const float two_pi = 6.28318530717958647692f;
+    const float step = two_pi * freq_hz / (float)sample_rate;
+    float phase = 0.0f;
+    uint32_t samples_left = total_samples;
+    size_t bytes_written;
+
+    while (samples_left > 0) {
+        size_t n = (samples_left < chunk) ? samples_left : chunk;
+        for (size_t i = 0; i < n; i++) {
+            float s = sinf(phase) * 0.3f * 32767.0f; // ~30% amplitude to start
+            int16_t sample = (int16_t)((int32_t)s * s_volume / 100);
+            buf[2 * i + 0] = sample; // L
+            buf[2 * i + 1] = sample; // R
+            phase += step;
+            if (phase > two_pi) phase -= two_pi;
+        }
+        i2s_channel_write(s_i2s_tx, buf, n * 2 * sizeof(int16_t),
+                          &bytes_written, pdMS_TO_TICKS(1000));
+        samples_left -= n;
+    }
+
+    free(buf);
+
+    // Flush trailing silence to avoid a click
+    int16_t silence[64] = {0};
+    i2s_channel_write(s_i2s_tx, silence, sizeof(silence), &bytes_written,
+                      pdMS_TO_TICKS(100));
+    i2s_safe_disable();
+
+    ESP_LOGI(TAG, "Test tone done");
     return ESP_OK;
 }

@@ -334,6 +334,19 @@ static esp_err_t audio_stop_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /api/audio/test — plays a 1-second 440 Hz tone via I2S directly.
+// Use this to verify the amp/speaker chain without any uploaded audio file.
+static esp_err_t audio_test_handler(httpd_req_t *req)
+{
+    esp_err_t ret = audio_player_play_test_tone(1000);
+    if (ret == ESP_OK) {
+        send_json_ok(req, "Test tone played");
+    } else {
+        send_json_error(req, 500, "Tone failed");
+    }
+    return ESP_OK;
+}
+
 // GET /api/config
 static esp_err_t config_get_handler(httpd_req_t *req)
 {
@@ -667,6 +680,12 @@ esp_err_t api_handlers_register(httpd_handle_t server)
     uri = (httpd_uri_t){ .uri = "/api/audio/stop", .method = HTTP_POST, .handler = audio_stop_handler };
     httpd_register_uri_handler(server, &uri);
 
+    // Test tone endpoint accepts both GET (easy address-bar trigger) and POST.
+    uri = (httpd_uri_t){ .uri = "/api/audio/test", .method = HTTP_POST, .handler = audio_test_handler };
+    httpd_register_uri_handler(server, &uri);
+    uri = (httpd_uri_t){ .uri = "/api/audio/test", .method = HTTP_GET, .handler = audio_test_handler };
+    httpd_register_uri_handler(server, &uri);
+
     // Config
     uri = (httpd_uri_t){ .uri = "/api/config", .method = HTTP_GET, .handler = config_get_handler };
     httpd_register_uri_handler(server, &uri);
@@ -697,6 +716,6 @@ esp_err_t api_handlers_register(httpd_handle_t server)
     uri = (httpd_uri_t){ .uri = "/api/format", .method = HTTP_POST, .handler = format_handler };
     httpd_register_uri_handler(server, &uri);
 
-    ESP_LOGI(TAG, "API handlers registered (%d endpoints)", 18);
+    ESP_LOGI(TAG, "API handlers registered (%d endpoints)", 19);
     return ESP_OK;
 }
