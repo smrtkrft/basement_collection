@@ -13,7 +13,7 @@ Dark only: it looks the same whether or not FileBrowser's own dark mode is on.
 **1. Get the folder onto your server**
 
 ```sh
-git clone https://github.com/SmartKraft/basement_collection.git
+git clone https://github.com/smrtkrft/basement_collection.git
 ```
 
 Everything you need is in `basement_collection/FileBrowser_css`.
