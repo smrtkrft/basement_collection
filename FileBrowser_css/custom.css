@@ -1,28 +1,28 @@
 /* =============================================================================
-   FileBrowser — Midnight
+   FileBrowser — Bakır
    =============================================================================
    A pure-CSS restyle of the FileBrowser web UI (https://filebrowser.org).
-   Deep navy falling to black, with a steel-blue accent.
+   Warm charcoal ground, copper accent, an engineering-paper grid backdrop.
+   No glass: panels are matte, lines are thin — an instrument panel, not a
+   window. Type is IBM Plex Sans, with Plex Mono for everything that reads
+   like a gauge: sizes, dates, breadcrumbs, labels.
 
-   Visual direction inspired by topa-LE/filebrowser-custom-dark-theme (GPL-2.0):
-   an atmospheric layered backdrop, a steel-blue accent, translucent surfaces
-   instead of drawn boxes, and Titillium Web.
+   Dark only. The theme paints itself the same whether or not FileBrowser's
+   own dark mode is on — see the `:root, :root.dark` selector in section 2.
 
-   The look is borrowed; the code is not. Every value here — hue, accent, the
-   backdrop composition, the surface alphas — is independently derived and
-   contrast-checked, so this file carries no GPL-2.0 obligation into an
-   AGPL-3.0 project. Credit to topa-LE for the direction.
-
-   Dark only. The theme paints itself the same whether or not FileBrowser's own
-   dark mode is on — see the `:root, :root.dark` selector in section 2.
+   The previous theme (Midnight — deep navy + steel blue) is kept next to
+   this file as custom-midnight.css. To switch back, swap the file names.
 
    Scope
      Presentation only. No markup, behaviour or program code is touched.
+     The only "content" this file produces is via CSS pseudo-elements:
+     the logo redirect (section 6/13) and the empty-folder drop zone
+     (section 16).
 
    Cascade
-     FileBrowser serves custom.css after its own stylesheets, so rules at equal
-     specificity win on source order. Selectors mirror upstream rather than
-     escalating specificity.
+     FileBrowser serves custom.css after its own stylesheets, so rules at
+     equal specificity win on source order. Selectors mirror upstream
+     rather than escalating specificity.
 
    Contents
      1.  Font                  10. Listing — shared
@@ -32,142 +32,133 @@
      5.  Motion & focus        14. Inputs, buttons & cards
      6.  Header                14a. Settings
      7.  Search                15. Storage meter
-     8.  Sidebar               16. Misc
-     9.  Breadcrumbs
+     8.  Sidebar               16. Empty folder
+     9.  Breadcrumbs           17. Misc
    ============================================================================= */
 
 /* -----------------------------------------------------------------------------
    1. Font
    -------------------------------------------------------------------------- */
 
-/* Titillium Web carries most of this design's character. It is fetched from
-   Google Fonts, so an air-gapped install will fall back to the platform UI face
-   — the layout holds, the personality doesn't. To go fully offline, drop this
-   @import and self-host the family under img/ (the only servable folder). */
-@import url("https://fonts.googleapis.com/css2?family=Titillium+Web:wght@300;400;600;700&display=swap");
+/* IBM Plex carries this design's character: Sans for prose, Mono for
+   anything instrument-like. Fetched from Google Fonts; an air-gapped
+   install falls back to the platform UI face — the layout holds, the
+   personality doesn't. */
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 /* -----------------------------------------------------------------------------
    2. Tokens
    -------------------------------------------------------------------------- */
 
 /* Declared on `:root` AND `:root.dark`. Upstream defines its dark palette on
-   `:root.dark` (0,2,0) — a plain `:root` (0,1,0) block here would lose to it for
-   any user who has dark mode switched on. Matching the selector keeps this theme
-   authoritative in both cases, which is what "dark only" has to mean. */
+   `:root.dark` (0,2,0) — a plain `:root` (0,1,0) block here would lose to it
+   for any user who has dark mode switched on. */
 :root,
 :root.dark {
-  /* Accent — steel blue. Retint the theme from this one triplet.
-     4.26:1 on the row surface, 3.03:1 at the backdrop's brightest point, so it
-     clears the 3:1 WCAG 1.4.11 floor for meaningful graphics everywhere it
-     lands. */
-  --tp-accent: 138, 170, 199; /* #8AAAC7 */
-  --tp-accent-dim: 106, 133, 158; /* #6A859E */
+  /* Accent — copper, like the traces on a PCB. Retint from this triplet. */
+  --bk-accent: 210 148 100; /* #D29464 */
+  --bk-accent-deep: 168 112 72;
 
-  /* Backdrop — deep navy falling to black. The whole atmosphere is one hue
-     walked down four lightnesses, from the lit core to the dark corners.
-     Retune the mood by overriding these six values and nothing else. */
-  --tp-hue: 215;
-  --tp-sat: 40%;
-  --tp-l-core: 24%; /* lit centre        */
-  --tp-l-mid: 15%; /* falling off       */
-  --tp-l-far: 8%; /* approaching edges */
-  --tp-l-edge: 4%; /* corners           */
+  /* Ground — one warm hue. */
+  --bk-hue: 26;
+  --bk-sat: 16%;
 
-  /* Surfaces are a thin veil over the backdrop, never a painted grey — that is
-     what keeps every panel tied to the same material. The ground here is almost
-     black, so panels lift *up* out of it with white at 4%; filling them with
-     black (as a lighter backdrop would want) would make them vanish. */
-  --tp-surface: rgba(255, 255, 255, 0.04); /* cards, rows        */
-  --tp-surface-deep: rgba(0, 0, 0, 0.35); /* header row, inputs */
-  --tp-hover: rgba(255, 255, 255, 0.08);
-  --tp-selected: rgba(var(--tp-accent), 0.26);
-  --tp-hairline: rgba(255, 255, 255, 0.08);
+  /* Panel opacity — the one knob. 1 is fully solid, lower is more glass. */
+  --bk-veil: 0.78;
 
-  --tp-r-sm: 5px;
-  --tp-r-md: 7px;
-  --tp-r-lg: 12px;
+  --bk-panel: hsl(var(--bk-hue) 14% 11% / var(--bk-veil));
+  --bk-panel-deep: hsl(var(--bk-hue) 16% 7% / var(--bk-veil));
+  --bk-hover: hsl(var(--bk-hue) 14% 16% / var(--bk-veil));
+  --bk-selected: color-mix(
+    in srgb,
+    rgb(var(--bk-accent)) 24%,
+    hsl(var(--bk-hue) 14% 11% / var(--bk-veil))
+  );
+  --bk-hairline: hsl(32 40% 80% / 0.09);
 
-  --tp-t: 200ms;
-  --tp-ease: cubic-bezier(0.2, 0, 0.2, 1);
+  --bk-r: 4px;
+  --bk-r-lg: 8px;
+  --bk-t: 160ms cubic-bezier(0.2, 0, 0.2, 1);
 
   /* --- Upstream token names -------------------------------------------------
      Careful: upstream's naming is inverted from what you'd expect.
        --textPrimary   = MUTED text
        --textSecondary = STRONG text
      Keep that mapping or every label flips weight. */
-  --blue: rgb(var(--tp-accent));
-  --dark-blue: rgb(var(--tp-accent-dim));
-  --red: #d95757;
-  --dark-red: #d61616;
-  --moon-grey: rgba(255, 255, 255, 0.08);
+  --blue: rgb(var(--bk-accent));
+  --dark-blue: rgb(var(--bk-accent-deep));
+  --red: #e07a6a;
+  --dark-red: #c14b39;
+  --moon-grey: hsl(32 40% 80% / 0.08);
 
-  --background: hsl(var(--tp-hue) var(--tp-sat) 7%);
-  --surfacePrimary: var(--tp-surface);
-  --surfaceSecondary: rgba(255, 255, 255, 0.08);
+  --background: hsl(var(--bk-hue) var(--bk-sat) 6%);
+  --surfacePrimary: var(--bk-panel);
+  --surfaceSecondary: hsl(32 40% 80% / 0.08);
 
-  --divider: rgba(255, 255, 255, 0.07);
-  --borderPrimary: rgba(255, 255, 255, 0.08);
-  --borderSecondary: rgba(255, 255, 255, 0.16);
+  --divider: hsl(32 40% 80% / 0.07);
+  --borderPrimary: var(--bk-hairline);
+  --borderSecondary: hsl(32 40% 80% / 0.16);
 
-  --textPrimary: #b0bcc8; /* muted  — 5.35:1 on the row surface */
-  --textSecondary: #ffffff; /* strong */
+  --textPrimary: #c8bcae; /* muted — warm grey  */
+  --textSecondary: #f6efe6; /* strong — warm white */
 
-  --hover: rgba(255, 255, 255, 0.08);
-  --action: #e8ebee;
+  --hover: hsl(32 40% 80% / 0.07);
+  --action: #ece4d9;
 
-  --iconPrimary: rgb(var(--tp-accent));
-  --iconSecondary: #ffffff;
-  --iconTertiary: rgba(255, 255, 255, 0.25);
+  --iconPrimary: rgb(var(--bk-accent));
+  --iconSecondary: #f6efe6;
+  --iconTertiary: hsl(32 40% 80% / 0.25);
 
-  /* Every file-type hue collapses onto the accent — the reference theme's most
-     distinctive move, and what makes the listing read as one material. */
-  --icon-red: rgb(var(--tp-accent));
-  --icon-orange: rgb(var(--tp-accent));
-  --icon-yellow: rgb(var(--tp-accent));
-  --icon-green: rgb(var(--tp-accent));
-  --icon-blue: rgb(var(--tp-accent));
-  --icon-violet: rgb(var(--tp-accent));
+  /* Every file-type hue collapses onto copper — one material. */
+  --icon-red: rgb(var(--bk-accent));
+  --icon-orange: rgb(var(--bk-accent));
+  --icon-yellow: rgb(var(--bk-accent));
+  --icon-green: rgb(var(--bk-accent));
+  --icon-blue: rgb(var(--bk-accent));
+  --icon-violet: rgb(var(--bk-accent));
 
-  --input-red: rgba(214, 22, 22, 0.25);
-  --input-green: rgba(90, 190, 120, 0.25);
+  --input-red: rgba(193, 75, 57, 0.25);
+  --input-green: rgba(120, 170, 110, 0.25);
 }
 
 /* -----------------------------------------------------------------------------
    3. Backdrop
    -------------------------------------------------------------------------- */
 
-/* The signature: the UI sits on lit atmosphere rather than a flat fill.
-
-   Two fixed layers, bottom to top:
-     1. an ellipse anchored at bottom-centre — steel at its core, falling to
-        near-black by the edges. One layer does all three jobs the look needs:
-        bright centre, low glow, dark corners.
-     2. a vertical scrim that presses the top and bottom bands down, so the
-        header and the page foot recede and the middle carries the eye.
-
-   `fixed` attachment holds it still while content scrolls, so panels read as
-   floating on one continuous surface instead of dragging a texture with them. */
+/* The signature: a warm lamp from the top edge over a millimetre-paper grid.
+   All layers are `fixed`, so the texture stands still while content scrolls
+   over it. */
 html,
 body,
 #login,
 #loading {
   min-height: 100%;
   background:
-    linear-gradient(
-        to bottom,
-        hsl(var(--tp-hue) var(--tp-sat) var(--tp-l-edge) / 0.5) 0%,
-        hsl(var(--tp-hue) var(--tp-sat) var(--tp-l-edge) / 0) 38%,
-        hsl(var(--tp-hue) var(--tp-sat) var(--tp-l-edge) / 0.38) 100%
+    repeating-linear-gradient(
+        90deg,
+        hsl(32 30% 75% / 0.028) 0 1px,
+        transparent 1px 32px
       )
-      center / cover no-repeat fixed,
+      fixed,
+    repeating-linear-gradient(
+        0deg,
+        hsl(32 30% 75% / 0.028) 0 1px,
+        transparent 1px 32px
+      )
+      fixed,
     radial-gradient(
-        105% 135% at 50% 90%,
-        hsl(var(--tp-hue) var(--tp-sat) var(--tp-l-core)) 0%,
-        hsl(var(--tp-hue) var(--tp-sat) var(--tp-l-mid)) 36%,
-        hsl(var(--tp-hue) var(--tp-sat) var(--tp-l-far)) 70%,
-        hsl(var(--tp-hue) var(--tp-sat) var(--tp-l-edge)) 100%
+        60% 34% at 50% 0%,
+        hsl(24 55% 28% / 0.3) 0%,
+        transparent 70%
       )
-      center / cover no-repeat fixed;
+      fixed,
+    radial-gradient(
+        130% 100% at 50% -20%,
+        hsl(var(--bk-hue) 22% 16%) 0%,
+        hsl(var(--bk-hue) 18% 10%) 48%,
+        hsl(var(--bk-hue) 16% 5%) 100%
+      )
+      fixed;
 }
 
 /* -----------------------------------------------------------------------------
@@ -176,8 +167,8 @@ body,
 
 body {
   font-family:
-    "Titillium Web", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+    "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
   color: var(--textPrimary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -196,13 +187,13 @@ h6 {
    5. Motion & focus
    -------------------------------------------------------------------------- */
 
-/* Upstream sets `outline: 0` on *, *:hover, *:active, *:focus, leaving keyboard
-   users with no focus indicator at all. Restore it on :focus-visible only, so
-   mouse users never see a ring. */
+/* Upstream sets `outline: 0` broadly, leaving keyboard users with no focus
+   indicator. Restore it on :focus-visible only, so mouse users never see
+   a ring. */
 :focus-visible {
-  outline: 2px solid rgb(var(--tp-accent)) !important;
+  outline: 2px solid rgb(var(--bk-accent)) !important;
   outline-offset: 2px;
-  border-radius: var(--tp-r-sm);
+  border-radius: var(--bk-r);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -220,23 +211,27 @@ h6 {
    6. Header
    -------------------------------------------------------------------------- */
 
-/* Not a bar drawn on the page — a darker pane of the same backdrop. */
 header {
-  background: rgba(0, 0, 0, 0.25);
-  border-bottom: 0;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+  background: var(--bk-panel-deep);
+  border-bottom: 1px solid var(--bk-hairline);
+  box-shadow: none;
   padding: 0.5em 0.75em 0.5em 0.9em;
 }
 
 header img {
-  height: 2em;
+  height: 1.9em;
   width: auto;
-  margin-right: 0.9em;
+  margin-right: 0.8em;
 }
 
+/* Brand name: mono, wide tracking — a device label, not a headline. */
 header title {
-  font-size: 1.05rem;
-  font-weight: 600;
+  display: inline-block;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.92rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--textSecondary);
 }
 
@@ -245,22 +240,22 @@ header title {
    -------------------------------------------------------------------------- */
 
 #search > div:first-child {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid transparent;
-  border-radius: var(--tp-r-md);
+  background: hsl(32 40% 80% / 0.07);
+  border: 1px solid var(--bk-hairline);
+  border-radius: var(--bk-r);
   color: var(--textPrimary);
   transition:
-    background var(--tp-t) var(--tp-ease),
-    border-color var(--tp-t) var(--tp-ease);
+    background var(--bk-t),
+    border-color var(--bk-t);
 }
 
 #search > div:first-child:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: hsl(32 40% 80% / 0.1);
 }
 
 #search input {
   color: var(--textSecondary);
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
 #search input::placeholder {
@@ -269,8 +264,8 @@ header title {
 
 #search.active > div:first-child,
 #search > div:first-child:focus-within {
-  background: rgba(0, 0, 0, 0.35);
-  border-color: rgba(var(--tp-accent), 0.5);
+  background: hsl(var(--bk-hue) 16% 6% / 0.8);
+  border-color: rgb(var(--bk-accent) / 0.55);
 }
 
 /* -----------------------------------------------------------------------------
@@ -290,8 +285,8 @@ nav > div {
 }
 
 nav .action {
-  border-radius: var(--tp-r-md);
-  font-size: 0.95rem;
+  border-radius: var(--bk-r);
+  font-size: 0.93rem;
   font-weight: 400;
   color: var(--textPrimary);
   padding: 0.12em 0.75em 0.12em 0.12em;
@@ -299,17 +294,17 @@ nav .action {
   display: flex;
   align-items: center;
   transition:
-    background var(--tp-t) var(--tp-ease),
-    color var(--tp-t) var(--tp-ease);
+    background var(--bk-t),
+    color var(--bk-t);
 }
 
 nav .action i {
-  font-size: 1.2em;
+  font-size: 1.15em;
   padding: 0.5em;
 }
 
 nav .action:hover {
-  background-color: rgba(255, 255, 255, 0.05);
+  background: hsl(32 40% 80% / 0.06);
   color: var(--textSecondary);
 }
 
@@ -319,16 +314,16 @@ nav #logout {
 }
 
 nav #logout:hover {
-  background-color: rgba(214, 22, 22, 0.14);
-  color: #ff8a8a;
+  background: rgba(193, 75, 57, 0.16);
+  color: #f2a08f;
 }
 
 nav #logout:hover i {
-  color: #ff8a8a;
+  color: #f2a08f;
 }
 
 .credits {
-  color: #8b949e;
+  color: #8f8578;
   font-size: 0.65em;
 }
 
@@ -341,39 +336,42 @@ nav #logout:hover i {
    9. Breadcrumbs
    -------------------------------------------------------------------------- */
 
-/* The accent underline is the reference theme's one drawn line. It earns its
-   keep by separating the toolbar from the content without a filled bar. */
+/* Mono path display — reads like a terminal prompt. */
 .breadcrumbs {
   background: none;
-  border-bottom: 1px solid rgba(var(--tp-accent), 0.55);
+  border-bottom: 1px solid var(--bk-hairline);
   height: 2.9em;
-  font-size: 0.95rem;
-  color: rgb(var(--tp-accent));
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+  color: var(--textPrimary);
 }
 
 .breadcrumbs a {
-  color: rgb(var(--tp-accent));
-  border-radius: var(--tp-r-sm);
+  color: var(--textPrimary);
+  border-radius: var(--bk-r);
   padding: 0.25em 0.4em;
   transition:
-    background var(--tp-t) var(--tp-ease),
-    color var(--tp-t) var(--tp-ease);
+    background var(--bk-t),
+    color var(--bk-t);
 }
 
 .breadcrumbs a:hover {
-  background-color: rgba(255, 255, 255, 0.08);
+  background: hsl(32 40% 80% / 0.07);
   color: var(--textSecondary);
 }
 
-/* The last crumb is where you are. */
+/* The last crumb is where you are — copper, underlined. */
 .breadcrumbs span:last-child a {
-  color: var(--textSecondary);
-  font-weight: 600;
+  color: rgb(var(--bk-accent));
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 rgb(var(--bk-accent) / 0.55);
+  border-radius: 0;
 }
 
 .breadcrumbs .chevron i {
-  font-size: 1.05em;
-  opacity: 0.5;
+  font-size: 1em;
+  opacity: 0.4;
 }
 
 /* -----------------------------------------------------------------------------
@@ -381,46 +379,46 @@ nav #logout:hover i {
    -------------------------------------------------------------------------- */
 
 #listing h2 {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
-  color: var(--textPrimary);
+  letter-spacing: 0.16em;
+  color: rgb(var(--bk-accent) / 0.85);
   margin: 1.6em 0 0.6em 0.2em;
 }
 
 #listing .item {
-  background-color: var(--tp-surface);
+  background: var(--bk-panel);
   border: none;
   color: var(--textPrimary);
   transition:
-    background-color var(--tp-t) var(--tp-ease),
-    box-shadow var(--tp-t) var(--tp-ease);
+    background var(--bk-t),
+    box-shadow var(--bk-t);
 }
 
-/* Upstream bolds every filename; at list density that is noise, not hierarchy. */
+/* Upstream bolds every filename; at list density that is noise. */
 #listing .item .name {
   font-weight: 400;
   color: var(--textSecondary);
-  font-size: 0.95rem;
+  font-size: 0.93rem;
 }
 
-/* Tabular figures stop the size column jittering as rows change. */
+/* Size and date in mono — aligned like a gauge readout. */
 #listing .item .size,
 #listing .item .modified {
-  font-size: 0.82rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.76rem;
   color: var(--textPrimary);
   font-variant-numeric: tabular-nums;
 }
 
 #listing .item i {
-  color: rgb(var(--tp-accent));
+  color: rgb(var(--bk-accent));
 }
 
-/* Upstream fades dotfiles and .bak files to opacity .33 — tuned for a white
-   background. Against this backdrop it drops them below legibility, so a
-   hidden file becomes an unreadable file. Lift it just enough to keep the
-   "de-emphasised" read without losing the name. */
+/* Upstream fades dotfiles to opacity .33 — tuned for a white background.
+   Lift it just enough to keep the de-emphasis without losing the name. */
 .file-icons [aria-label^="."],
 .file-icons [data-ext=".bak"] {
   opacity: 0.55;
@@ -429,12 +427,12 @@ nav #logout:hover i {
 /* --- Selection ---------------------------------------------------------------
    Upstream floods the row with solid --blue and marks it !important, so both
    background and colour must be re-declared with !important at matching
-   specificity. The accent bar carries the state; the tint supports it. */
+   specificity. The copper bar carries the state; the tint supports it. */
 
 #listing .item[aria-selected="true"] {
-  background-color: var(--tp-selected) !important;
+  background: var(--bk-selected) !important;
   color: var(--textSecondary) !important;
-  box-shadow: inset 2px 0 0 0 rgb(var(--tp-accent));
+  box-shadow: inset 2px 0 0 0 rgb(var(--bk-accent));
 }
 
 #listing .item[aria-selected="true"] .name {
@@ -443,10 +441,9 @@ nav #logout:hover i {
 
 #listing .item[aria-selected="true"] .size,
 #listing .item[aria-selected="true"] .modified {
-  color: #d6dde4 !important;
+  color: #e8ddd0 !important;
 }
 
-/* Upstream whitens the icon to survive the solid blue row. */
 #listing .item[aria-selected="true"] i {
   color: #ffffff !important;
 }
@@ -455,19 +452,18 @@ nav #logout:hover i {
    11. Listing — list view
    -------------------------------------------------------------------------- */
 
-/* Rows are separated by the backdrop showing through, not by rules. The row fill
-   has to sit deeper than the backdrop for that gap to register — at the
-   reference's rgba(0,0,0,.15) the rows silt together into one mass. */
+/* Rows are separated by the backdrop showing through in the 3px gaps between
+   them, not by rules — the near-solid fill (--bk-veil) does the rest. */
 #listing.list .item {
-  background-color: rgba(0, 0, 0, 0.22);
+  background: var(--bk-panel);
   border: 0;
-  border-radius: var(--tp-r-md);
+  border-radius: var(--bk-r);
   padding: 0.5em 0.75em;
   margin-bottom: 3px;
 }
 
 #listing.list .item:hover {
-  background-color: var(--tp-hover);
+  background: var(--bk-hover);
 }
 
 #listing.list .item div:first-of-type {
@@ -481,7 +477,7 @@ nav #logout:hover i {
 #listing.list .item div:first-of-type img {
   width: 1.5em;
   height: 1.5em;
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 #listing.list .item div:last-of-type {
@@ -489,21 +485,18 @@ nav #logout:hover i {
 }
 
 #listing.list .item.header {
-  background-color: rgba(0, 0, 0, 0.4);
+  background: var(--bk-panel-deep);
   border: 0;
-  border-radius: var(--tp-r-md);
+  border-radius: var(--bk-r);
   padding: 0.45em 0.75em;
   margin-bottom: 4px;
 }
 
 /* Column alignment.
    Data rows are [icon column][content], but the header has no icon column —
-   upstream gives its single div width:100% and tries to compensate with
-   `margin-right: 3em` on the name, which *shrinks* the name rather than
-   shifting it. The result: header labels never sit above their columns.
-   Padding the header by the icon-column width fixes it properly;
-   box-sizing:border-box (base.css) then makes the header's content box exactly
-   match the rows', so the 50% / 25% column widths line up.
+   upstream compensates with `margin-right: 3em` on the name, which *shrinks*
+   the name rather than shifting it, so header labels never sit above their
+   columns. Padding the header by the icon-column width fixes it properly.
    Must stay after the `div:last-of-type` rule above — same specificity, so
    source order decides. */
 #listing.list .item.header > div {
@@ -516,12 +509,13 @@ nav #logout:hover i {
 }
 
 #listing.list .item.header p {
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.14em;
   color: var(--textPrimary);
-  transition: color var(--tp-t) var(--tp-ease);
+  transition: color var(--bk-t);
 }
 
 #listing.list .item.header p:hover {
@@ -529,8 +523,8 @@ nav #logout:hover i {
 }
 
 #listing.list .item.header .active {
-  color: rgb(var(--tp-accent));
-  font-weight: 700;
+  color: rgb(var(--bk-accent));
+  font-weight: 500;
 }
 
 #listing.list .header i {
@@ -542,20 +536,20 @@ nav #logout:hover i {
    -------------------------------------------------------------------------- */
 
 #listing.mosaic .item {
-  background-color: var(--tp-surface);
+  background: var(--bk-panel);
   border: 0;
-  border-radius: var(--tp-r-md);
+  border-radius: var(--bk-r);
   box-shadow: none !important; /* upstream stacks two drop shadows */
   padding: 0.75em;
 }
 
 #listing.mosaic .item:hover {
-  background-color: var(--tp-hover);
+  background: var(--bk-hover);
   box-shadow: none !important; /* upstream raises the shadow on hover */
 }
 
 #listing.mosaic .item[aria-selected="true"] {
-  box-shadow: inset 0 0 0 1px rgb(var(--tp-accent)) !important;
+  box-shadow: inset 0 0 0 1px rgb(var(--bk-accent)) !important;
 }
 
 #listing.mosaic.gallery .item {
@@ -563,93 +557,108 @@ nav #logout:hover i {
 }
 
 #listing.mosaic.gallery .item img {
-  border-radius: var(--tp-r-sm);
+  border-radius: var(--bk-r);
 }
 
 /* -----------------------------------------------------------------------------
    13. Login
    -------------------------------------------------------------------------- */
 
-/* Upstream centres a bare 16em form on a flat surface. Against this backdrop a
-   translucent pane is the honest move — same material as every other surface,
-   just lifted. The blur is what sells it as glass rather than grey paint. */
+/* A pane of the same panel material, near-solid, lifted by the shadow. */
 #login form {
+  position: relative;
   max-width: 20rem;
   width: calc(100% - 2rem);
-  background: rgba(0, 0, 0, 0.28);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
-  border: 1px solid var(--tp-hairline);
-  border-radius: var(--tp-r-lg);
-  padding: 2.25rem 1.75rem 1.75rem;
-  box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.5);
+  background: hsl(var(--bk-hue) 16% 9% / 0.92);
+  border: 1px solid var(--bk-hairline);
+  border-radius: var(--bk-r-lg);
+  padding: 2.4rem 1.75rem 1.75rem;
+  box-shadow: 0 18px 44px -12px rgba(0, 0, 0, 0.55);
+}
+
+/* A copper strip worked into the card's top edge. */
+#login form::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 14%;
+  right: 14%;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(var(--bk-accent) / 0.9),
+    transparent
+  );
 }
 
 /* Swap the logo without touching markup.
-   Upstream hard-codes <img src="{staticURL}/img/logo.svg"> in constants.ts, and
-   the Go handler only serves `img/*` and `custom.css` from the branding dir.
+   Upstream hard-codes <img src="{staticURL}/img/logo.svg">, and the Go
+   handler only serves `img/*` and `custom.css` from the branding dir.
    `content` repoints the rendered image at a sibling file, so a PNG works
-   without renaming it to .svg and lying about its MIME type. Relative to
-   custom.css at /static/custom.css this resolves to /static/img/logo.png. */
+   without renaming it to .svg. */
 #login img,
 header img {
   content: url("img/logo.png");
 }
 
 #login img {
-  width: 3.25em;
-  height: 3.25em;
+  width: 3rem;
+  height: 3rem;
   object-fit: contain;
 }
 
 #login h1 {
-  font-size: 1.35rem;
-  font-weight: 600;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   color: var(--textSecondary);
-  margin: 0.8rem 0 1.5rem;
+  margin: 0.9rem 0 1.5rem;
 }
 
 #login .input {
   height: 2.75rem; /* 44px — comfortable target, no iOS zoom at 16px */
   font-size: 1rem;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid transparent;
-  border-radius: var(--tp-r-md);
+  background: hsl(var(--bk-hue) 18% 5% / 0.7);
+  border: 1px solid var(--bk-hairline);
+  border-radius: var(--bk-r);
   color: var(--textSecondary);
   margin-bottom: 0.6rem;
   padding: 0 0.9rem;
 }
 
 #login .input:hover {
-  background: rgba(0, 0, 0, 0.32);
+  background: hsl(var(--bk-hue) 18% 5% / 0.85);
 }
 
 #login .input:focus {
-  background: rgba(0, 0, 0, 0.35);
-  border-color: rgba(var(--tp-accent), 0.6);
-  box-shadow: 0 0 0 3px rgba(var(--tp-accent), 0.15);
+  background: hsl(var(--bk-hue) 18% 5% / 0.9);
+  border-color: rgb(var(--bk-accent) / 0.6);
+  box-shadow: 0 0 0 3px rgb(var(--bk-accent) / 0.14);
 }
 
 #login .button {
   height: 2.75rem;
   margin-top: 0.5rem;
-  font-size: 0.95rem;
+  font-size: 0.88rem;
   font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-/* Feedback panels. Upstream ships solid red/orange slabs, which read as alarming
-   out of all proportion to the message.
-   These must NOT be shaped like the inputs they sit above — same width, height
-   and radius as a text field reads as a text field, and users try to type in it.
-   A left rule and a tighter box say "notice" instead. */
+/* Feedback panels. Not shaped like the inputs they sit above — a filled box
+   at input size reads as a text field, and users try to type in it. A left
+   rule and a tighter box say "notice" instead. */
 #login .wrong,
 #login .logout-message {
-  background: none; /* a filled box this size still reads as a text field */
+  background: none;
   border: 0;
   border-left: 2px solid;
   border-radius: 0;
   padding: 0.1em 0 0.1em 0.7em;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 400;
   line-height: 1.45;
   text-align: left;
@@ -658,29 +667,29 @@ header img {
 }
 
 #login .wrong {
-  border-left-color: #d95757;
-  color: #ffb3b3;
+  border-left-color: #e07a6a;
+  color: #f4b3a6;
 }
 
 #login .logout-message {
-  border-left-color: rgb(var(--tp-accent));
-  color: #c2d2e2; /* the accent alone sat at ~4.3:1 against the card */
+  border-left-color: rgb(var(--bk-accent));
+  color: #e2d2c0;
 }
 
 /* The signup toggle is a <p> upstream, so give it a link's affordance. */
 #login form > p:last-child {
-  color: rgb(var(--tp-accent));
+  color: rgb(var(--bk-accent));
   text-align: center;
   font-size: 0.85rem;
   text-transform: none;
   margin: 1rem 0 0;
-  border-radius: var(--tp-r-sm);
+  border-radius: var(--bk-r);
   padding: 0.35em;
-  transition: background var(--tp-t) var(--tp-ease);
+  transition: background var(--bk-t);
 }
 
 #login form > p:last-child:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: hsl(32 40% 80% / 0.06);
   color: var(--textSecondary);
 }
 
@@ -689,15 +698,15 @@ header img {
    -------------------------------------------------------------------------- */
 
 .input {
-  background: rgba(0, 0, 0, 0.25);
+  background: hsl(var(--bk-hue) 18% 5% / 0.6);
   color: var(--textSecondary);
-  border: 1px solid transparent;
-  border-radius: var(--tp-r-sm);
+  border: 1px solid var(--bk-hairline);
+  border-radius: var(--bk-r);
   box-shadow: none;
   padding: 0.55em 0.8em;
   transition:
-    background var(--tp-t) var(--tp-ease),
-    border-color var(--tp-t) var(--tp-ease);
+    background var(--bk-t),
+    border-color var(--bk-t);
 }
 
 .input::placeholder {
@@ -706,24 +715,24 @@ header img {
 
 .input:hover,
 .input:focus {
-  border-color: rgba(var(--tp-accent), 0.6);
+  border-color: rgb(var(--bk-accent) / 0.6);
 }
 
 .action {
-  border-radius: var(--tp-r-sm);
+  border-radius: var(--bk-r);
   color: var(--action);
-  transition: background-color var(--tp-t) var(--tp-ease);
+  transition: background var(--bk-t);
 }
 
 .action i {
-  border-radius: var(--tp-r-sm);
+  border-radius: var(--bk-r);
   font-size: 1.25em;
   padding: 0.5em;
-  color: rgb(var(--tp-accent));
+  color: rgb(var(--bk-accent));
 }
 
 .action:hover {
-  background-color: rgba(var(--tp-accent), 0.14);
+  background: rgb(var(--bk-accent) / 0.14);
 }
 
 .action:hover i {
@@ -731,37 +740,38 @@ header img {
 }
 
 .action .counter {
-  background: rgb(var(--tp-accent-dim));
+  background: rgb(var(--bk-accent-deep));
   color: #ffffff;
-  border: 2px solid rgba(255, 255, 255, 0.25);
+  border: 2px solid hsl(32 40% 80% / 0.25);
   font-weight: 600;
   font-size: 0.7em;
 }
 
-#delete-button:hover i {
-  color: #ff8a8a;
+#delete-button:hover {
+  background: rgba(193, 75, 57, 0.16);
 }
 
-/* A mid-slate fill at button size reads as *disabled* rather than primary —
-   fatal for the one CTA on the login screen. The accent is the same family, two
-   steps brighter, and carries dark text at ~9:1. */
+#delete-button:hover i {
+  color: #f2a08f;
+}
+
 .button {
-  background: rgb(var(--tp-accent));
-  color: #101820;
+  background: rgb(var(--bk-accent));
+  color: #221409;
   border: 1px solid transparent;
-  border-radius: var(--tp-r-sm);
+  border-radius: var(--bk-r);
   box-shadow: none;
   font-weight: 600;
   padding: 0.55em 1.1em;
   transition:
-    background var(--tp-t) var(--tp-ease),
-    color var(--tp-t) var(--tp-ease);
+    background var(--bk-t),
+    color var(--bk-t);
 }
 
 .button:hover,
 .button:focus {
-  background: #a6bed6;
-  color: #101820;
+  background: #e2ab7d;
+  color: #221409;
 }
 
 .button--red {
@@ -776,70 +786,97 @@ header img {
 }
 
 .button--flat:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: hsl(32 40% 80% / 0.08);
 }
 
 .button--flat.button--red {
-  color: #ff8a8a;
+  color: #f2a08f;
 }
 
 .button[disabled] {
   opacity: 0.4;
 }
 
-/* Modals are the one solid surface — they must not read as part of the page. */
+/* Cards (prompts included) are the one solid surface — they must not read
+   as part of the page. */
 .card,
 .card.floating {
-  background: hsl(var(--tp-hue) 18% 18%);
-  border: 1px solid var(--tp-hairline);
-  border-radius: var(--tp-r-lg);
+  background: hsl(var(--bk-hue) 12% 14%);
+  border: 1px solid var(--bk-hairline);
+  border-radius: var(--bk-r-lg);
   box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6);
 }
 
+/* Card titles speak the same device-label language. */
 .card h2,
 .card h3 {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
   color: var(--textSecondary);
-  font-weight: 600;
+}
+
+.card .card-content p {
+  color: var(--textPrimary);
+  font-size: 0.88rem;
+}
+
+.card-action .button--flat {
+  color: rgb(var(--bk-accent));
+}
+
+.card-action .button--flat:hover {
+  background: rgb(var(--bk-accent) / 0.14);
+  color: var(--textSecondary);
+}
+
+.card-action .button--flat.button--grey {
+  color: var(--textPrimary);
+}
+
+/* The scrim behind prompts. */
+.overlay {
+  background: hsl(var(--bk-hue) 30% 3% / 0.6);
 }
 
 /* -----------------------------------------------------------------------------
    14a. Settings
    -------------------------------------------------------------------------- */
 
-/* Settings is a real view (Settings.vue + dashboard.css), not just cards. Its
-   tab strip, tables and form rows all need the treatment or the page falls back
-   to upstream's light-theme greys on top of this backdrop. */
+/* Settings is a real view (Settings.vue + dashboard.css), not just cards. */
 
-/* Tab strip. Upstream underlines the whole strip with a 2px --divider rule and
-   marks the active tab with --blue plus an 8%-opacity ::before wash. Here the
-   rule thins to a hairline and the accent does the pointing. */
 .dashboard #nav .wrapper {
-  border-bottom: 1px solid var(--tp-hairline);
+  border-bottom: 1px solid var(--bk-hairline);
 }
 
 .dashboard #nav ul {
   color: var(--textPrimary);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .dashboard #nav ul li {
-  padding: 1.1em 1.6em;
-  border-radius: var(--tp-r-sm) var(--tp-r-sm) 0 0;
+  padding: 1.1em 1.5em;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--bk-r) var(--bk-r) 0 0;
   transition:
-    background var(--tp-t) var(--tp-ease),
-    color var(--tp-t) var(--tp-ease),
-    border-color var(--tp-t) var(--tp-ease);
+    background var(--bk-t),
+    color var(--bk-t),
+    border-color var(--bk-t);
 }
 
 .dashboard #nav ul li:hover {
-  background: var(--tp-hover);
+  background: hsl(32 40% 80% / 0.06);
   color: var(--textSecondary);
 }
 
 .dashboard #nav ul li.active {
-  border-color: rgb(var(--tp-accent));
-  color: rgb(var(--tp-accent));
+  border-bottom-color: rgb(var(--bk-accent));
+  color: rgb(var(--bk-accent));
 }
 
 /* Upstream's 8% accent wash under the active tab reads as grime on a dark
@@ -850,6 +887,7 @@ header img {
 
 .dashboard p label {
   color: var(--textPrimary);
+  font-size: 0.9rem;
 }
 
 .dashboard .small,
@@ -857,46 +895,27 @@ header img {
   color: var(--textPrimary);
 }
 
-/* Settings cards are the page's content, not floating dialogs, so they take the
-   same translucent surface as everything else — no shadow, no lift. */
+/* Settings cards are the page's content, not floating dialogs — matte panel,
+   no shadow, no lift. */
 .dashboard .card {
-  background: var(--tp-surface);
-  border: 1px solid var(--tp-hairline);
-  border-radius: var(--tp-r-md);
+  background: var(--bk-panel);
+  border: 1px solid var(--bk-hairline);
+  border-radius: var(--bk-r);
   box-shadow: none;
 }
 
-.dashboard .card h2 {
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-
-.dashboard .card h3 {
-  color: var(--textSecondary);
-  font-weight: 600;
-}
-
-.card-action .button--flat {
-  color: rgb(var(--tp-accent));
-}
-
-.card-action .button--flat:hover {
-  background: rgba(var(--tp-accent), 0.14);
-  color: var(--textSecondary);
-}
-
-/* Tables. Upstream rules every row with --iconTertiary, which on this backdrop
-   is a bright line per row — far too loud for a data table. */
+/* Tables. Thin row rules; mono label headers. */
 table tr {
-  border-bottom: 1px solid var(--tp-hairline);
+  border-bottom: 1px solid var(--bk-hairline);
 }
 
 table th {
+  font-family: "IBM Plex Mono", monospace;
   color: var(--textPrimary);
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.66rem;
+  font-weight: 500;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   padding: 0.75em 0;
 }
 
@@ -907,49 +926,106 @@ table td {
 
 li code,
 p code {
-  background: rgba(0, 0, 0, 0.3);
-  color: rgb(var(--tp-accent));
-  border-radius: 4px;
+  background: hsl(var(--bk-hue) 18% 5% / 0.6);
+  color: rgb(var(--bk-accent));
+  border-radius: 3px;
   padding: 0.1em 0.35em;
 }
 
-/* Checkboxes stay native — a custom control here would be styling for its own
-   sake, and the platform one is already accessible. Just tint it. */
+/* Checkboxes stay native — the platform control is already accessible.
+   Just tint it. */
 .dashboard input[type="checkbox"] {
-  accent-color: rgb(var(--tp-accent));
+  accent-color: rgb(var(--bk-accent));
   width: 1em;
   height: 1em;
   vertical-align: -0.1em;
-  margin-right: 0.35em;
+  margin-right: 0.4em;
 }
 
 /* -----------------------------------------------------------------------------
    15. Storage meter
    -------------------------------------------------------------------------- */
 
-/* ProgressBar.vue writes `background` as an INLINE style on both the track and
-   the bar, so only !important can reach them. */
+/* ProgressBar.vue writes `background` as an INLINE style on both the track
+   and the bar, so only !important can reach them. */
 .vue-simple-progress {
-  background: rgba(255, 255, 255, 0.1) !important;
+  background: hsl(32 40% 80% / 0.1) !important;
   border-radius: 999px;
   overflow: hidden;
 }
 
 .vue-simple-progress-bar {
-  background: rgb(var(--tp-accent)) !important;
+  background: rgb(var(--bk-accent)) !important;
   border-radius: 999px;
 }
 
 /* -----------------------------------------------------------------------------
-   16. Misc
+   16. Empty folder
+   -------------------------------------------------------------------------- */
+
+/* Not a sad face — a useful drop zone. Upstream's markup is just
+   <h2 class="message"><i>sentiment_dissatisfied</i><span>text</span></h2>.
+   CSS turns it into an upload target: the icon becomes a cloud via a
+   pseudo-element, the translated text stays as the title, and a helper
+   line points at the upload buttons that already live in the toolbar.
+
+   Caveat: if your FileBrowser version renders its error pages (404/403)
+   with the same h2.message markup, the cloud icon and helper line appear
+   there too. If that bothers you, delete this section. */
+h2.message {
+  display: block;
+  max-width: 26em;
+  margin: 10vh auto 0;
+  padding: 2.6em 2em 2.4em;
+  background: var(--bk-panel);
+  border: 1px dashed rgb(var(--bk-accent) / 0.45);
+  border-radius: var(--bk-r-lg);
+  text-align: center;
+  color: var(--textPrimary);
+  font-weight: 400;
+}
+
+h2.message i {
+  display: none; /* sentiment_dissatisfied */
+}
+
+h2.message::before {
+  content: "cloud_upload";
+  font-family: "Material Icons";
+  display: block;
+  font-size: 2.4rem;
+  line-height: 1;
+  color: rgb(var(--bk-accent));
+  margin-bottom: 0.45em;
+}
+
+h2.message span {
+  display: block;
+  font-size: 1.02rem;
+  font-weight: 500;
+  color: var(--textSecondary);
+}
+
+/* The helper line is plain content — edit the string to taste. */
+h2.message::after {
+  content: "Dosyaları buraya sürükleyip bırak — ya da üst çubuktaki yükle düğmesini kullan.";
+  display: block;
+  margin-top: 0.55em;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--textPrimary);
+}
+
+/* -----------------------------------------------------------------------------
+   17. Misc
    -------------------------------------------------------------------------- */
 
 .progress div {
-  background-color: rgb(var(--tp-accent));
+  background-color: rgb(var(--bk-accent));
 }
 
 #listing #multiple-selection {
-  background: hsl(var(--tp-hue) 18% 18%);
+  background: hsl(var(--bk-hue) 12% 14%);
 }
 
 .message {
@@ -958,7 +1034,7 @@ p code {
 }
 
 .link {
-  color: rgb(var(--tp-accent));
+  color: rgb(var(--bk-accent));
 }
 
 ::-webkit-scrollbar {
@@ -971,13 +1047,13 @@ p code {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.16);
+  background: hsl(32 40% 80% / 0.16);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--tp-accent), 0.7);
+  background: rgb(var(--bk-accent) / 0.7);
   background-clip: padding-box;
 }
